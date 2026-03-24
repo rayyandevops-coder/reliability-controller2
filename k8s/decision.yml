@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: decision
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: decision
+  template:
+    metadata:
+      labels:
+        app: decision
+    spec:
+      containers:
+      - name: decision
+        image: rayyandevopss/decision-service:latest
+        ports:
+        - containerPort: 5002
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: decision-service
+spec:
+  selector:
+    app: decision
+  ports:
+    - port: 5002
+      targetPort: 5002
+  type: ClusterIP

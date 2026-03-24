@@ -1,0 +1,48 @@
+version: "3"
+
+services:
+  detector:
+    build: ./detector
+    container_name: detector
+    ports:
+      - "5001:5001"
+    networks:
+      monitor-network:
+        aliases:
+          - detector-service  
+  executer:
+    build: ./executer
+    container_name: executer
+    ports:
+      - "5003:5003"
+    privileged: true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      monitor-network:
+        aliases:
+          - executer-service   
+
+  decision:
+    build: ./decision
+    container_name: decision
+    ports:
+      - "5002:5002"
+    networks:
+      monitor-network:
+        aliases:
+          - decision-service  
+
+  monitor:
+    build: ./monitor
+    container_name: monitor
+    depends_on:
+      - detector
+      - executer
+      - decision
+    networks:
+      - monitor-network
+
+networks:
+  monitor-network:
+    driver: bridge
