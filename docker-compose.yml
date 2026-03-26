@@ -1,15 +1,26 @@
 version: "3"
 
 services:
-  detector:
-    build: ./detector
-    container_name: detector
+  web1:
+    build: ./web1
+    container_name: web1
     ports:
       - "5001:5001"
     networks:
       monitor-network:
         aliases:
-          - detector-service  
+          - web1-service  
+
+  web2:
+    build: ./web2
+    container_name: web2
+    ports:
+      - "5002:5002"
+    networks:
+      monitor-network:
+        aliases:
+          - web2-service  
+
   executer:
     build: ./executer
     container_name: executer
@@ -23,23 +34,15 @@ services:
         aliases:
           - executer-service   
 
-  decision:
-    build: ./decision
-    container_name: decision
-    ports:
-      - "5002:5002"
-    networks:
-      monitor-network:
-        aliases:
-          - decision-service  
-
   monitor:
     build: ./monitor
     container_name: monitor
+    ports:
+      - "5004:5004"
     depends_on:
-      - detector
+      - web1
+      - web2
       - executer
-      - decision
     networks:
       - monitor-network
 

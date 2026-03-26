@@ -1,31 +1,31 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: detector
+  name: web2
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: detector
+      app: web2
   template:
     metadata:
       labels:
-        app: detector
+        app: web2
     spec:
       containers:
-      - name: detector
-        image: rayyandevopss/detector-service:latest
+      - name: web2
+        image: rayyandevopss/web2-service:latest
         ports:
-        - containerPort: 5001
+        - containerPort: 5002
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: detector-service
+  name: web2-service
 spec:
   selector:
-    app: detector
+    app: web2
   ports:
-    - port: 5001
-      targetPort: 5001
+    - port: 5002
+      targetPort: 5002
   type: ClusterIP
