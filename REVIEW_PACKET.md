@@ -1,211 +1,137 @@
-# REVIEW_PACKET
+REVIEW PACKET
 
----
+1. SYSTEM OVERVIEW
+This system implements a monitoring layer inside a distributed control loop.
+Responsibilities:
+Detect system health
+Emit structured metrics
+Provide decision input
+Accept execution actions
+Log complete lifecycle
 
-## 1. ENTRY POINT
+2. ENDPOINTS
+Endpoint
+Description
+/health
+Health check
+/metrics
+Monitoring output
+/internal/runtime-payload
+Decision input
+/execute-action
+Action execution
 
-Path: monitor/app.py
-The system starts by running Flask applications for each service via Docker Compose.
 
----
+3. CONTRACTS
+Monitoring → Decision
+Endpoint: /internal/runtime-payload
+Fields:
+cpu_usage
+memory_usage
+error_rate
+health_score
+environment
 
-## 2. CORE EXECUTION FLOW
-
-### File 1 — Monitoring Logic
-
-Path: monitor/app.py
-Performs service health checks and emits structured metrics with detection and recommendation.
-
----
-
-### File 2 — API Handling
-
-Path: executer/app.py
-Handles external POST requests for action execution with validation and safety checks.
-
----
-
-### File 3 — Action Execution
-
-Path: executer/app.py
-Executes validated actions (restart simulated/real) with cooldown and rate limiting.
-
----
-
-## 3. LIVE FLOW
-
-User → System Flow:
-
-Request → Monitor detects failure → Emits signal → External request → Action executed → Response returned
-
-### Example Output:
-
-```json
+Decision → Control
+Input:
 {
   "service_id": "web1",
-  "status": "critical",
-  "issue_detected": true,
-  "issue_type": "crash",
-  "recommended_action": "restart"
+  "action": "restart"
 }
-```
 
----
 
-## 4. WHAT WAS BUILT IN THIS TASK
-
-### Changes Made:
-
-* Removed auto-recovery logic
-* Implemented deterministic `/metrics`
-* Added `/execute-action` endpoint
-* Added structured logging
-* Implemented cooldown & rate limiting
-
-### Added:
-
-* External control interface
-* Safety mechanisms
-
-### Unchanged:
-
-* Base service structure
-* Docker setup
-
----
-
-## 5. FAILURE CASES
-
-### Invalid Input:
-
+Control → Monitoring
+Endpoint: /execute-action
 Returns:
+execution_id
+status
+reason
 
-```json
+4. DETERMINISM
+Fixed thresholds used
+No randomness
+Same input → same output
+
+5. LOGGING STRUCTURE
+Detection
 {
-  "status": "FAILED",
-  "reason": "INVALID_INPUT"
+  "event": "DETECTION"
 }
-```
 
----
-
-### Rapid Repeated Actions:
-
-Returns:
-
-```json
+Recommendation
 {
-  "status": "BLOCKED",
-  "reason": "COOLDOWN_ACTIVE"
+  "event": "RECOMMENDATION"
 }
-```
 
----
-
-### Rate Limit Exceeded:
-
-Returns:
-
-```json
+Execution
 {
-  "status": "FAILED",
-  "reason": "RATE_LIMIT_EXCEEDED"
+  "event": "ACTION_EXECUTED"
 }
-```
 
----
 
-### Missing Service:
-
-Handled via validation — request rejected
-
----
-
-## 6. PROOF
-
-* Docker logs (JSON structured)
-* API responses via Postman / curl
-* Terminal outputs showing detection and execution flow
-
----
-REVIEW_PACKET
-
-1. ENTRY POINT
-Path: monitor/app.py
-The system starts by running Flask applications for each service via Docker Compose.
-
-2. CORE EXECUTION FLOW
-File 1 — Monitoring Logic
-Path: monitor/app.py
-Performs service health checks and emits structured metrics with detection and recommendation.
-
-File 2 — API Handling
-Path: executer/app.py
-Handles external POST requests for action execution with validation and safety checks.
-
-File 3 — Action Execution
-Path: executer/app.py
-Executes validated actions (restart simulated/real) with cooldown and rate limiting.
-
-3. LIVE FLOW
-User → System Flow:
-Request → Monitor detects failure → Emits signal → External request → Action executed → Response returned
-Example Output:
+6. FULL TRACE (MANDATORY)
+Failure
 {
   "service_id": "web1",
-  "status": "critical",
+  "status": "critical"
+}
+
+
+Metrics Output
+{
   "issue_detected": true,
   "issue_type": "crash",
   "recommended_action": "restart"
 }
 
 
-4. WHAT WAS BUILT IN THIS TASK
-Changes Made:
-Removed auto-recovery logic
-Implemented deterministic /metrics
-Added /execute-action endpoint
-Added structured logging
-Implemented cooldown & rate limiting
-Added:
-External control interface
-Safety mechanisms
-Unchanged:
-Base service structure
-Docker setup
-
-5. FAILURE CASES
-Invalid Input:
-Returns:
+Decision
 {
-  "status": "FAILED",
-  "reason": "INVALID_INPUT"
+  "action": "restart"
 }
 
 
-Rapid Repeated Actions:
-Returns:
+Execution
 {
-  "status": "BLOCKED",
-  "reason": "COOLDOWN_ACTIVE"
+  "status": "executed"
 }
 
 
-Rate Limit Exceeded:
-Returns:
+7. INTEGRATION FLOW
+Flow:
+Monitoring → Decision → Execution
+
+Data Mapping
+Monitoring
+Decision
+cpu
+cpu_usage
+memory
+memory_usage
+error_rate
+error_rate
+
+
+Real JSON Trace
 {
-  "status": "FAILED",
-  "reason": "RATE_LIMIT_EXCEEDED"
+  "detection": {
+    "service_id": "web1",
+    "issue": "crash"
+  },
+  "decision": {
+    "action": "restart"
+  },
+  "execution": {
+    "status": "executed"
+  }
 }
 
 
-Missing Service:
-Handled via validation — request rejected
-
-6. PROOF
-Docker logs (JSON structured)
-API responses via Postman / curl
-Terminal outputs showing detection and execution flow
-
+8. FINAL OUTCOME
+A fully integratable monitoring layer that:
+Emits deterministic signals
+Supports decision systems
+Accepts control actions
+Provides complete observability
 
 

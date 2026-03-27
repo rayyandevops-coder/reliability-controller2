@@ -1,102 +1,147 @@
-Integration Readiness Hardening — Monitoring & Execution Layer
+Monitoring Layer - Distributed Control Loop System
+Overview
+This project implements a deterministic monitoring layer integrated into a distributed infrastructure control loop.
+It is designed to:
+Detect service health
+Emit structured metrics
+Feed a decision engine
+Accept control actions
+Provide full observability via logs
 
-Overview:
-This project implements a deterministic monitoring and execution system designed for integration into a distributed control loop architecture.
-The system acts as:
-Monitoring + Signal Layer → Detects system state and emits structured signals
-Execution Layer → Accepts external control and performs validated actions
+Architecture
+Monitoring → Decision Engine → Control Plane
+Monitoring Layer (This Project) → Detect → Structure → Emit
+Decision Engine (Ritesh) → Analyze → Decide
+Control Plane (Shivam) → Execute → Enforce
 
-Objective:
-To convert an existing system into a:
-Deterministic
-Structured
-Externally controlled
-Safe and auditable module
+Key Features:
+Deterministic monitoring (no randomness)
+Fixed schema output
+Control-loop compatible
+Structured logging
+Plug-and-play integration
 
-Architecture:
-Monitor → Emits signals
-↓
-Decision System (external)
-↓
-Control Plane (external)
-↓
-Executer → Executes actions
-
-Services
-Service  	Port	Description
-web1	    5001	Sample service
-web2	    5002	Sample service
-executer	5003	Executes actions
-monitor	    5004	Emits metrics
-
-
-How to Run
-1. Build & Start
-docker-compose down
-docker-compose up --build
-
-
-2. Access Services
-Monitor:
-http://localhost:5004/metrics
-
-Executer:
-http://localhost:5003/execute-action
+Services:
+Service	   Port
+web1	     5001
+web2	     5002
+executer	 5003
+monitor	   5004
 
 
 API Endpoints:
+1. Health Check
+GET /health
 
-/health
-Returns system health
+2. Metrics (Core Output)
+GET /metrics
+Output Schema:
 {
-  "status": "healthy"
+  "service_id": "string",
+  "timestamp": "UTC ISO",
+  "status": "healthy | degraded | critical",
+  "metrics": {
+    "cpu": float,
+    "memory": float,
+    "error_rate": float,
+    "uptime": int
+  },
+  "issue_detected": boolean,
+  "issue_type": "cpu_spike | memory_leak | crash | none",
+  "recommended_action": "noop | restart | scale_up | scale_down"
 }
 
 
-/metrics (GET)
-Returns deterministic system state
+3. Runtime Payload (Decision Input)
+GET /internal/runtime-payload
+{
+  "cpu_usage": float,
+  "memory_usage": float,
+  "error_rate": float,
+  "health_score": float,
+  "environment": "docker"
+}
+
+
+4. Execute Action
+POST /execute-action
+Input:
 {
   "service_id": "web1",
-  "status": "critical",
-  "issue_type": "crash",
-  "recommended_action": "restart"
+  "action": "restart",
+  "source": "decision_engine"
 }
 
-
-/execute-action (POST)
-Request:
+Output:
 {
-  "service_id": "web1",
-  "action": "restart"
-}
-
-Response:
-{
-  "status": "SUCCESS",
-  "service_id": "web1",
-  "action": "restart"
+  "execution_id": "uuid",
+  "status": "executed",
+  "reason": "restart applied successfully"
 }
 
 
-Safety Features:
-✅ Cooldown system (prevents repeated actions)
-✅ Rate limiting (max requests per window)
-✅ Strict input validation
-✅ Structured JSON logging
-❌ No auto-recovery (external control only)
+Integration Flow
+Monitoring detects issue
+/metrics emits structured data
+Decision engine reads runtime payload
+Action generated
+/execute-action triggered
+Action executed and logged
 
-Logging:
-All logs are structured JSON:
-Detection logs
-Recommendation logs
-Action requests
-Execution results
+Logging
+Monitor Logs
+DETECTION
+RECOMMENDATION
+Executer Logs:
+ACTION_RECEIVED
+ACTION_ACCEPTED
+ACTION_EXECUTED
 
-Design Principle:
-The system does not take decisions or auto-heal.
-It emits signals and waits for external control.
+Docker Setup:
+Pull Images
+docker pull rayyandevopss/monitor-service:latest
+docker pull rayyandevopss/executer-service:latest
+docker pull rayyandevopss/web1-service:latest
+docker pull rayyandevopss/web2-service:latest
+
+
+Run System
+docker-compose up
+
+
+Stop System
+docker-compose down
+
+
+Kubernetes Deployment:
+kubectl apply -f web1.yaml
+kubectl apply -f web2.yaml
+kubectl apply -f executer.yaml
+kubectl apply -f monitor.yaml
+
+Expose monitor:
+kubectl port-forward service/monitor 5004:5004
+
+
+Testing:
+Simulate Failure
+docker stop web1
+
+Check Metrics
+http://localhost:5004/metrics
+
+Execute Action (PowerShell)
+Invoke-RestMethod -Uri "http://localhost:5003/execute-action" `
+-Method Post `
+-Headers @{"Content-Type"="application/json"} `
+-Body '{
+  "service_id": "web1",
+  "action": "restart",
+  "source": "decision_engine"
+}'
+
 
 Outcome:
-A deterministic, integration-ready monitoring system suitable for real-world distributed environments.
+A deterministic monitoring system integrated into a control loop, capable of driving real-time infrastructure decisions.
 
 

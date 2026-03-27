@@ -6,21 +6,41 @@ import logging
 
 app = Flask(__name__)
 
-# Deterministic service list
+# ---------------- SERVICES ----------------
 services = {
     "web1": "http://web1-service:5001/health",
     "web2": "http://web2-service:5002/health",
     "executer": "http://executer-service:5003/health"
 }
 
-# Logging setup
-logging.basicConfig(
-    filename="monitor.log",
-    level=logging.INFO,
-    format='%(message)s'
-)
+# ---------------- LOGGING ----------------
+import logging
 
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
+# Prevent duplicate handlers
+if not logger.handlers:
+    file_handler = logging.FileHandler("monitor.log")
+    file_handler.setFormatter(logging.Formatter('%(message)s'))
+
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(logging.Formatter('%(message)s'))
+
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+# ---------------- DETECTION LOGIC ----------------
+def analyze_metrics(cpu, memory, error_rate):
+    if cpu > 0.85:
+        return True, "cpu_spike", "scale_up"
+    elif memory > 0.85:
+        return True, "memory_leak", "restart"
+    elif error_rate > 0.3:
+        return True, "crash", "restart"
+    else:
+        return False, "none", "noop"
+
+# ---------------- METRICS ----------------
 @app.route("/metrics")
 def metrics():
     results = []
@@ -28,48 +48,37 @@ def metrics():
     for service_id in sorted(services.keys()):
         url = services[service_id]
 
-        status = "healthy"
-        issue_detected = False
-        issue_type = "none"
-        recommended_action = "noop"
-
-        # Deterministic metrics (fixed values)
+        # Deterministic base values
         cpu = 0.3
         memory = 0.5
         error_rate = 0.0
         uptime = 100
+        status = "healthy"
 
         try:
             start = time.time()
             response = requests.get(url, timeout=3)
             response_time = int((time.time() - start) * 1000)
 
-            # Logic for degradation (deterministic rules)
+            # Deterministic rules
             if response.status_code != 200:
                 status = "critical"
-                issue_detected = True
-                issue_type = "crash"
-                recommended_action = "restart"
+                error_rate = 1.0
 
             elif response_time > 500:
                 status = "degraded"
-                issue_detected = True
-                issue_type = "cpu_spike"
-                recommended_action = "scale_up"
+                cpu = 0.9  # simulate spike
 
-        except Exception as e:
+        except:
             status = "critical"
-            issue_detected = True
-            issue_type = "crash"
-            recommended_action = "restart"
+            error_rate = 1.0
 
-            error_message = str(e)
-        else:
-            error_message = None
+        # Detection
+        issue_detected, issue_type, recommended_action = analyze_metrics(cpu, memory, error_rate)
 
         timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ")
 
-        # Structured output
+        # ---------------- OUTPUT ----------------
         output = {
             "service_id": service_id,
             "timestamp": timestamp,
@@ -85,28 +94,54 @@ def metrics():
             "recommended_action": recommended_action
         }
 
-        # Structured logging (MANDATORY)
-        log_entry = {
+        # ---------------- LOGGING ----------------
+
+        # 1. DETECTION LOG
+        logging.info(json.dumps({
+            "timestamp": timestamp,
             "event": "DETECTION",
             "service_id": service_id,
             "status": status,
-            "issue_type": issue_type,
-            "recommended_action": recommended_action,
-            "timestamp": timestamp,
-            "error": error_message
-        }
+            "issue_type": issue_type
+        }))
 
-        logging.info(json.dumps(log_entry))
+        # 2. RECOMMENDATION LOG (MANDATORY FIX)
+        logging.info(json.dumps({
+            "timestamp": timestamp,
+            "event": "RECOMMENDATION",
+            "service_id": service_id,
+            "recommended_action": recommended_action
+        }))
 
         results.append(output)
 
     return jsonify(results)
 
+# ---------------- RUNTIME PAYLOAD ----------------
+@app.route("/internal/runtime-payload")
+def runtime_payload():
+    # Deterministic mapping (fixed values)
+    cpu = 0.3
+    memory = 0.5
+    error_rate = 0.0
 
+    health_score = round(1 - max(cpu, memory, error_rate), 2)
+
+    payload = {
+        "cpu_usage": cpu,
+        "memory_usage": memory,
+        "error_rate": error_rate,
+        "health_score": health_score,
+        "environment": "docker"
+    }
+
+    return jsonify(payload)
+
+# ---------------- HEALTH ----------------
 @app.route("/health")
 def health():
     return jsonify({"status": "healthy"})
 
-
+# ---------------- MAIN ----------------
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5004)
+    app.run(host="0.0.0.0", port=5004, debug=False)
