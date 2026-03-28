@@ -3,10 +3,14 @@ import requests
 import time
 import json
 import logging
+import psutil
+import os
 
 app = Flask(__name__)
 
-# ---------------- SERVICES ----------------
+# ---------------- CONFIG ----------------
+ENV = os.getenv("ENV", "DEV")
+
 services = {
     "web1": "http://web1-service:5001/health",
     "web2": "http://web2-service:5002/health",
@@ -14,103 +18,70 @@ services = {
 }
 
 # ---------------- LOGGING ----------------
-import logging
-
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-# Prevent duplicate handlers
 if not logger.handlers:
-    file_handler = logging.FileHandler("monitor.log")
-    file_handler.setFormatter(logging.Formatter('%(message)s'))
+    fh = logging.FileHandler("monitor.log")
+    ch = logging.StreamHandler()
 
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(logging.Formatter('%(message)s'))
+    formatter = logging.Formatter('%(message)s')
+    fh.setFormatter(formatter)
+    ch.setFormatter(formatter)
 
-    logger.addHandler(file_handler)
-    logger.addHandler(console_handler)
-# ---------------- DETECTION LOGIC ----------------
-def analyze_metrics(cpu, memory, error_rate):
-    if cpu > 0.85:
-        return True, "cpu_spike", "scale_up"
-    elif memory > 0.85:
-        return True, "memory_leak", "restart"
-    elif error_rate > 0.3:
-        return True, "crash", "restart"
-    else:
-        return False, "none", "noop"
+    logger.addHandler(fh)
+    logger.addHandler(ch)
 
 # ---------------- METRICS ----------------
 @app.route("/metrics")
 def metrics():
     results = []
 
+    system_cpu = psutil.cpu_percent(interval=1) / 100
+    system_memory = psutil.virtual_memory().percent / 100
+
     for service_id in sorted(services.keys()):
         url = services[service_id]
 
-        # Deterministic base values
-        cpu = 0.3
-        memory = 0.5
-        error_rate = 0.0
-        uptime = 100
         status = "healthy"
+        error_rate = 0.0
 
         try:
             start = time.time()
             response = requests.get(url, timeout=3)
-            response_time = int((time.time() - start) * 1000)
+            latency = int((time.time() - start) * 1000)
 
-            # Deterministic rules
             if response.status_code != 200:
                 status = "critical"
                 error_rate = 1.0
 
-            elif response_time > 500:
+            elif latency > 500:
                 status = "degraded"
-                cpu = 0.9  # simulate spike
 
         except:
             status = "critical"
             error_rate = 1.0
 
-        # Detection
-        issue_detected, issue_type, recommended_action = analyze_metrics(cpu, memory, error_rate)
-
         timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ")
 
-        # ---------------- OUTPUT ----------------
         output = {
             "service_id": service_id,
             "timestamp": timestamp,
             "status": status,
-            "metrics": {
-                "cpu": cpu,
-                "memory": memory,
-                "error_rate": error_rate,
-                "uptime": uptime
-            },
-            "issue_detected": issue_detected,
-            "issue_type": issue_type,
-            "recommended_action": recommended_action
+            "cpu": round(system_cpu, 2),
+            "memory": round(system_memory, 2),
+            "error_rate": error_rate,
+            "env": ENV
         }
 
-        # ---------------- LOGGING ----------------
-
-        # 1. DETECTION LOG
+        # DETECTION LOG ONLY (NO DECISION)
         logging.info(json.dumps({
             "timestamp": timestamp,
             "event": "DETECTION",
             "service_id": service_id,
             "status": status,
-            "issue_type": issue_type
-        }))
-
-        # 2. RECOMMENDATION LOG (MANDATORY FIX)
-        logging.info(json.dumps({
-            "timestamp": timestamp,
-            "event": "RECOMMENDATION",
-            "service_id": service_id,
-            "recommended_action": recommended_action
+            "cpu": output["cpu"],
+            "memory": output["memory"]
         }))
 
         results.append(output)
@@ -120,19 +91,18 @@ def metrics():
 # ---------------- RUNTIME PAYLOAD ----------------
 @app.route("/internal/runtime-payload")
 def runtime_payload():
-    # Deterministic mapping (fixed values)
-    cpu = 0.3
-    memory = 0.5
-    error_rate = 0.0
+    cpu = psutil.cpu_percent(interval=1) / 100
+    memory = psutil.virtual_memory().percent / 100
 
-    health_score = round(1 - max(cpu, memory, error_rate), 2)
+    status = "healthy"
+    if cpu > 0.85 or memory > 0.85:
+        status = "degraded"
 
     payload = {
-        "cpu_usage": cpu,
-        "memory_usage": memory,
-        "error_rate": error_rate,
-        "health_score": health_score,
-        "environment": "docker"
+        "cpu": round(cpu, 2),
+        "memory": round(memory, 2),
+        "status": status,
+        "env": ENV
     }
 
     return jsonify(payload)
@@ -144,4 +114,4 @@ def health():
 
 # ---------------- MAIN ----------------
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5004, debug=False)
+    app.run(host="0.0.0.0", port=5004)

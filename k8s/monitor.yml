@@ -17,6 +17,9 @@ spec:
         image: rayyandevopss/monitor-service:latest
         ports:
         - containerPort: 5004
+        env:
+        - name: ENV
+          value: "PROD"
 ---
 apiVersion: v1
 kind: Service
@@ -26,6 +29,7 @@ spec:
   selector:
     app: monitor
   ports:
-  - port: 5004
-    targetPort: 5004
+    - protocol: TCP
+      port: 5004
+      targetPort: 5004
   type: NodePort

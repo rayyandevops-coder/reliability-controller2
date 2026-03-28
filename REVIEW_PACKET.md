@@ -1,137 +1,93 @@
-REVIEW PACKET
+REVIEW PACKET – TASK 4
 
-1. SYSTEM OVERVIEW
-This system implements a monitoring layer inside a distributed control loop.
-Responsibilities:
-Detect system health
-Emit structured metrics
-Provide decision input
-Accept execution actions
-Log complete lifecycle
+---
 
-2. ENDPOINTS
-Endpoint
-Description
-/health
-Health check
-/metrics
-Monitoring output
-/internal/runtime-payload
-Decision input
-/execute-action
-Action execution
+1. ENTRY POINT
 
+* Monitor: `/metrics`
+* Executer: `/execute-action`
 
-3. CONTRACTS
-Monitoring → Decision
-Endpoint: /internal/runtime-payload
-Fields:
-cpu_usage
-memory_usage
-error_rate
-health_score
-environment
+---
 
-Decision → Control
-Input:
-{
-  "service_id": "web1",
-  "action": "restart"
-}
+2. CORE EXECUTION FLOW
 
+1. Monitor collects:
 
-Control → Monitoring
-Endpoint: /execute-action
-Returns:
-execution_id
-status
-reason
+   * CPU
+   * Memory
+   * Service health
 
-4. DETERMINISM
-Fixed thresholds used
-No randomness
-Same input → same output
+2. Emits deterministic JSON
 
-5. LOGGING STRUCTURE
-Detection
-{
-  "event": "DETECTION"
-}
+3. External system (RL / Control Plane):
 
-Recommendation
-{
-  "event": "RECOMMENDATION"
-}
+   * Consumes payload
+   * Decides action
 
-Execution
-{
-  "event": "ACTION_EXECUTED"
-}
+4. Executer:
 
+   * Validates action
+   * Applies via Kubernetes
 
-6. FULL TRACE (MANDATORY)
-Failure
-{
-  "service_id": "web1",
-  "status": "critical"
-}
+---
 
+3. LIVE FLOW
 
-Metrics Output
-{
-  "issue_detected": true,
-  "issue_type": "crash",
-  "recommended_action": "restart"
-}
+Example:
 
+Step 1:
+GET /metrics
 
-Decision
-{
-  "action": "restart"
-}
+Step 2:
+Decision system selects:
+"restart web1"
 
+Step 3:
+POST /execute-action
 
-Execution
-{
-  "status": "executed"
-}
+Step 4:
+Kubernetes executes:
+kubectl rollout restart deployment/web1
 
+---
 
-7. INTEGRATION FLOW
-Flow:
-Monitoring → Decision → Execution
+4. CHANGES MADE
 
-Data Mapping
-Monitoring
-Decision
-cpu
-cpu_usage
-memory
-memory_usage
-error_rate
-error_rate
+| Area       | Before            | After                 |
+| ---------- | ----------------- | --------------------- |
+| Monitoring | Simulated metrics | Real metrics (psutil) |
+| Decision   | Inside monitor    | Removed               |
+| Execution  | Simulated         | Real kubectl          |
+| Payload    | cpu_usage         | cpu                   |
+| Safety     | None              | Cooldown added        |
 
+---
 
-Real JSON Trace
-{
-  "detection": {
-    "service_id": "web1",
-    "issue": "crash"
-  },
-  "decision": {
-    "action": "restart"
-  },
-  "execution": {
-    "status": "executed"
-  }
-}
+5. FAILURE CASES
 
+1. Invalid action → rejected (400)
+2. Rapid repeated action → blocked (429)
+3. Service down → detected via /metrics
+4. Kubernetes failure → logged in executer
 
-8. FINAL OUTCOME
-A fully integratable monitoring layer that:
-Emits deterministic signals
-Supports decision systems
-Accepts control actions
-Provides complete observability
+---
+
+6. PROOF
+
+* Logs: monitor.log, executer.log
+* API outputs (curl)
+* Kubernetes commands executed
+
+---
+
+7. SYSTEM GUARANTEES
+
+* Deterministic outputs
+* No randomness
+* External control only
+* Safe execution layer
+
+---
+
 
 
