@@ -17,6 +17,7 @@ spec:
         image: rayyandevopss/web1-service:latest
         ports:
         - containerPort: 5001
+        imagePullPolicy: Always
 ---
 apiVersion: v1
 kind: Service

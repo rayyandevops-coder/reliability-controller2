@@ -17,6 +17,7 @@ spec:
         image: rayyandevopss/executer-service:latest
         ports:
         - containerPort: 5003
+        imagePullPolicy: Always
 ---
 apiVersion: v1
 kind: Service

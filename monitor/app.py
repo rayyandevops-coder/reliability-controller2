@@ -8,7 +8,6 @@ import os
 
 app = Flask(__name__)
 
-# ---------------- CONFIG ----------------
 ENV = os.getenv("ENV", "DEV")
 
 services = {
@@ -32,6 +31,7 @@ if not logger.handlers:
     logger.addHandler(fh)
     logger.addHandler(ch)
 
+
 # ---------------- METRICS ----------------
 @app.route("/metrics")
 def metrics():
@@ -45,6 +45,9 @@ def metrics():
 
         status = "healthy"
         error_rate = 0.0
+        issue_detected = False
+        issue_type = "none"
+        recommended_action = "noop"
 
         try:
             start = time.time()
@@ -54,13 +57,22 @@ def metrics():
             if response.status_code != 200:
                 status = "critical"
                 error_rate = 1.0
+                issue_detected = True
+                issue_type = "crash"
+                recommended_action = "restart"
 
             elif latency > 500:
                 status = "degraded"
+                issue_detected = True
+                issue_type = "cpu_spike"
+                recommended_action = "scale_up"
 
         except:
             status = "critical"
             error_rate = 1.0
+            issue_detected = True
+            issue_type = "crash"
+            recommended_action = "restart"
 
         timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -68,25 +80,31 @@ def metrics():
             "service_id": service_id,
             "timestamp": timestamp,
             "status": status,
-            "cpu": round(system_cpu, 2),
-            "memory": round(system_memory, 2),
-            "error_rate": error_rate,
-            "env": ENV
+            "metrics": {
+                "cpu": round(system_cpu, 2),
+                "memory": round(system_memory, 2),
+                "error_rate": error_rate,
+                "uptime": int(time.time())
+            },
+            "issue_detected": issue_detected,
+            "issue_type": issue_type,
+            "recommended_action": recommended_action
         }
 
-        # DETECTION LOG ONLY (NO DECISION)
         logging.info(json.dumps({
             "timestamp": timestamp,
             "event": "DETECTION",
             "service_id": service_id,
+            "metrics": output["metrics"],
             "status": status,
-            "cpu": output["cpu"],
-            "memory": output["memory"]
+            "issue_type": issue_type,
+            "action": recommended_action
         }))
 
         results.append(output)
 
     return jsonify(results)
+
 
 # ---------------- RUNTIME PAYLOAD ----------------
 @app.route("/internal/runtime-payload")
@@ -99,19 +117,22 @@ def runtime_payload():
         status = "degraded"
 
     payload = {
-        "cpu": round(cpu, 2),
-        "memory": round(memory, 2),
-        "status": status,
-        "env": ENV
+        "app_id": "monitor-service",
+        "cpu_usage": round(cpu, 2),
+        "memory_usage": round(memory, 2),
+        "error_rate": 0.0,
+        "health_score": 1.0 if status == "healthy" else 0.5,
+        "environment": ENV.lower()
     }
 
     return jsonify(payload)
+
 
 # ---------------- HEALTH ----------------
 @app.route("/health")
 def health():
     return jsonify({"status": "healthy"})
 
-# ---------------- MAIN ----------------
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5004)

@@ -17,6 +17,7 @@ spec:
         image: rayyandevopss/web2-service:latest
         ports:
         - containerPort: 5002
+        imagePullPolicy: Always
 ---
 apiVersion: v1
 kind: Service
