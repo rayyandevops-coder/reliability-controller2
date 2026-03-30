@@ -17,10 +17,10 @@ spec:
         image: rayyandevopss/monitor-service:latest
         ports:
         - containerPort: 5004
-        imagePullPolicy: Always
+
         env:
         - name: ENV
-          value: "PROD"
+          value: "DEV"
 ---
 apiVersion: v1
 kind: Service
@@ -30,7 +30,6 @@ spec:
   selector:
     app: monitor
   ports:
-    - protocol: TCP
-      port: 5004
+    - port: 5004
       targetPort: 5004
-  type: NodePort
+  type: ClusterIP

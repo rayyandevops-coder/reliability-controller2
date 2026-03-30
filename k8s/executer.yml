@@ -18,6 +18,19 @@ spec:
         ports:
         - containerPort: 5003
         imagePullPolicy: Always
+
+        env:
+        - name: EXECUTION_MODE
+          value: "kubernetes"
+
+        volumeMounts:
+        - name: kube-config
+          mountPath: /root/.kube
+
+      volumes:
+      - name: kube-config
+        hostPath:
+          path: /root/.kube
 ---
 apiVersion: v1
 kind: Service
@@ -27,7 +40,6 @@ spec:
   selector:
     app: executer
   ports:
-    - protocol: TCP
-      port: 5003
+    - port: 5003
       targetPort: 5003
-  type: NodePort
+  type: ClusterIP

@@ -1,187 +1,144 @@
+"""
+executer/app.py — SETU Execution Engine
+Full pipeline: proposal → Mitra scoring → Sarathi decision → Core execution
+→ Bucket logging → Outcome recording
+"""
+
 from flask import Flask, request, jsonify
 import uuid
+import time
 import json
-import logging
-from datetime import datetime, timedelta
-import subprocess
-import os
+
+from mitra           import calculate_score
+from sovereign_bridge import send_to_sarathi
+from core            import execute_action, verify_deployment
+from bucket          import log_event
+from outcome         import record_outcome
 
 app = Flask(__name__)
 
-# ---------------- CONFIG ----------------
-EXECUTION_MODE = os.getenv("EXECUTION_MODE", "docker")  # docker | kubernetes
-
-logging.basicConfig(
-    filename="executer.log",
-    level=logging.INFO,
-    format='%(message)s'
-)
-
-VALID_ACTIONS = ["restart", "scale_up", "scale_down", "noop"]
-
-cooldowns = {}
-COOLDOWN_TIME = 10  # seconds
+VALID_ACTIONS = {"restart", "scale_up", "scale_down", "noop"}
 
 
-# ---------------- LOGGER ----------------
-def log_event(event_type, service_id, action, result):
-    log = {
-        "timestamp": datetime.utcnow().isoformat(),
-        "event": event_type,
-        "service_id": service_id,
-        "action": action,
-        "result": result,
-        "mode": EXECUTION_MODE
-    }
-    logging.info(json.dumps(log))
-
-
-# ---------------- VERIFY ----------------
-def verify_deployment(service_id):
-    try:
-        if EXECUTION_MODE == "kubernetes":
-            result = subprocess.run(
-                ["kubectl", "get", "pods"],
-                capture_output=True,
-                text=True
-            )
-            return service_id in result.stdout
-
-        elif EXECUTION_MODE == "docker":
-            result = subprocess.run(
-                ["docker", "ps"],
-                capture_output=True,
-                text=True
-            )
-            return service_id in result.stdout
-
-        return False
-    except:
-        return False
-
-
-# ---------------- EXECUTION ----------------
-def execute_real_action(service_id, action):
-    try:
-        # -------- KUBERNETES --------
-        if EXECUTION_MODE == "kubernetes":
-
-            if action == "restart":
-                cmd = ["kubectl", "rollout", "restart", f"deployment/{service_id}"]
-
-            elif action == "scale_up":
-                cmd = ["kubectl", "scale", f"deployment/{service_id}", "--replicas=2"]
-
-            elif action == "scale_down":
-                cmd = ["kubectl", "scale", f"deployment/{service_id}", "--replicas=1"]
-
-            else:
-                return "noop"
-
-            result = subprocess.run(cmd, capture_output=True, text=True)
-
-            if result.returncode != 0:
-                return f"K8S_ERROR: {result.stderr.strip()}"
-
-            return result.stdout.strip()
-
-        # -------- DOCKER --------
-        elif EXECUTION_MODE == "docker":
-
-            if action == "restart":
-                cmd = ["docker", "restart", service_id]
-
-            elif action == "scale_up":
-                return f"DOCKER_SCALE_UP simulated for {service_id}"
-
-            elif action == "scale_down":
-                return f"DOCKER_SCALE_DOWN simulated for {service_id}"
-
-            else:
-                return "noop"
-
-            result = subprocess.run(cmd, capture_output=True, text=True)
-
-            if result.returncode != 0:
-                return f"DOCKER_ERROR: {result.stderr.strip()}"
-
-            return result.stdout.strip()
-
-        # -------- FALLBACK --------
-        else:
-            return "UNKNOWN_EXECUTION_MODE"
-
-    except Exception as e:
-        return f"EXCEPTION: {str(e)}"
-
-
-# ---------------- EXECUTE API ----------------
 @app.route("/execute-action", methods=["POST"])
-def execute_action():
-    data = request.get_json()
-
+def execute():
+    data       = request.get_json()
     service_id = data.get("service_id")
-    action = data.get("action")
+    action     = data.get("action", "noop")
+    metrics    = data.get("metrics", {})
+    trace_id   = str(uuid.uuid4())
 
-    execution_id = str(uuid.uuid4())
+    # ── VALIDATION ────────────────────────────────────────────────────────────
+    if not service_id:
+        return jsonify({"error": "service_id required"}), 400
 
-    log_event("ACTION_RECEIVED", service_id, action, "incoming")
-
-    # VALIDATION
     if action not in VALID_ACTIONS:
-        log_event("ACTION_REJECTED", service_id, action, "invalid")
+        return jsonify({"error": f"invalid action: {action}"}), 400
 
+    if action == "noop":
+        return jsonify({"trace_id": trace_id, "status": "noop", "action": "noop"})
+
+    # ── STAGE 1: proposal created ─────────────────────────────────────────────
+    log_event(trace_id, "proposal_created", {
+        "service_id": service_id,
+        "action":     action,
+        "metrics":    metrics
+    })
+
+    # ── STAGE 2: Mitra scoring ────────────────────────────────────────────────
+    score_data = calculate_score(metrics)
+    data.update(score_data)
+
+    log_event(trace_id, "proposal_scored", score_data)
+
+    # ── STAGE 3: Sarathi decision ─────────────────────────────────────────────
+    sarathi_payload = {
+        "trace_id":   trace_id,
+        "action_type": action,
+        "service_id": service_id,
+        "source":     "SETU",
+        "payload": {
+            **data,
+            "decision_score": score_data["decision_score"]
+        }
+    }
+
+    decision = send_to_sarathi(sarathi_payload)
+
+    log_event(trace_id, "sarathi_decision", decision)
+
+    sarathi_status = decision.get("status", "ERROR")
+
+    if sarathi_status == "BLOCK":
         return jsonify({
-            "execution_id": execution_id,
-            "status": "failed",
-            "action": action,
-            "reason": "invalid action",
-            "verified": False
-        }), 400
+            "trace_id":        trace_id,
+            "status":          "blocked",
+            "sarathi_decision": sarathi_status,
+            "reason":          decision.get("reason", "policy blocked this action")
+        })
 
-    # COOLDOWN
-    now = datetime.utcnow()
-    if service_id in cooldowns and now < cooldowns[service_id]:
-        log_event("ACTION_BLOCKED", service_id, action, "cooldown")
-
+    if sarathi_status == "ESCALATE":
         return jsonify({
-            "execution_id": execution_id,
-            "status": "blocked",
-            "action": action,
-            "reason": "cooldown active",
-            "verified": False
-        }), 429
+            "trace_id":        trace_id,
+            "status":          "escalated",
+            "sarathi_decision": sarathi_status,
+            "reason":          "requires manual approval"
+        })
 
-    cooldowns[service_id] = now + timedelta(seconds=COOLDOWN_TIME)
+    if sarathi_status == "ERROR":
+        # Sarathi unreachable — fail safe (do NOT execute)
+        return jsonify({
+            "trace_id": trace_id,
+            "status":   "sarathi_error",
+            "reason":   decision.get("reason", "unknown")
+        }), 503
 
-    log_event("ACTION_ACCEPTED", service_id, action, "valid")
+    # sarathi_status == "ALLOW" — proceed to execution
+    # ── STAGE 4: Core execution ───────────────────────────────────────────────
+    start  = time.time()
+    result = execute_action(service_id, action)
+    latency = time.time() - start
 
-    # EXECUTION
-    result = execute_real_action(service_id, action)
+    success = not result.startswith("ERROR")
+    status  = "success" if success else "failed"
 
-    status = "executed" if "ERROR" not in result and "EXCEPTION" not in result else "failed"
+    log_event(trace_id, "execution_result", {
+        "service_id": service_id,
+        "action":     action,
+        "result":     result,
+        "status":     status
+    })
 
-    log_event("ACTION_EXECUTED", service_id, action, result)
-
-    # VERIFICATION
+    # ── STAGE 5: Verification ─────────────────────────────────────────────────
     verified = verify_deployment(service_id)
 
-    log_event("VERIFICATION", service_id, action, "success" if verified else "failed")
+    # ── STAGE 6: Outcome (feedback loop) ─────────────────────────────────────
+    outcome = record_outcome(
+        trace_id=trace_id,
+        success=success,
+        latency=latency,
+        action=action,
+        service_id=service_id
+    )
+
+    log_event(trace_id, "outcome", outcome)
 
     return jsonify({
-        "execution_id": execution_id,
-        "status": status,
-        "action": action,
-        "reason": result,
-        "verified": verified
+        "trace_id":        trace_id,
+        "status":          status,
+        "action":          action,
+        "result":          result,
+        "verified":        verified,
+        "sarathi_decision": sarathi_status,
+        "decision_score":  score_data["decision_score"],
+        "priority":        score_data["priority"]
     })
 
 
-# ---------------- HEALTH ----------------
 @app.route("/health")
 def health():
-    return jsonify({"status": "healthy", "mode": EXECUTION_MODE})
+    return jsonify({"status": "healthy"})
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5003)
+    app.run(host="0.0.0.0", port=5003, use_reloader=False)

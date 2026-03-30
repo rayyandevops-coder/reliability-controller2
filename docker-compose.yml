@@ -1,6 +1,7 @@
-version: "3"
+version: "3.8"
 
 services:
+
   web1:
     build: ./web1
     container_name: web1
@@ -9,7 +10,7 @@ services:
     networks:
       monitor-network:
         aliases:
-          - web1-service  
+          - web1-service
 
   web2:
     build: ./web2
@@ -19,30 +20,48 @@ services:
     networks:
       monitor-network:
         aliases:
-          - web2-service  
+          - web2-service
+
+  sarathi:
+    build: ./sarathi
+    container_name: sarathi
+    ports:
+      - "5005:5001"      # host 5005 → container 5001 (avoids clash with web1)
+    networks:
+      monitor-network:
+        aliases:
+          - sarathi      # executer calls http://sarathi:5001
 
   executer:
     build: ./executer
     container_name: executer
     ports:
       - "5003:5003"
-    privileged: true
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - EXECUTION_MODE=simulate    # change to "kubernetes" on cluster
+      - SARATHI_URL=http://sarathi:5001/decision
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - sarathi
     networks:
       monitor-network:
         aliases:
-          - executer-service   
+          - executer-service
 
   monitor:
     build: ./monitor
     container_name: monitor
     ports:
       - "5004:5004"
+    environment:
+      - EXECUTER_URL=http://executer-service:5003
+      - POLL_INTERVAL=10
+      - PYTHONUNBUFFERED=1
     depends_on:
       - web1
       - web2
       - executer
+      - sarathi
     networks:
       - monitor-network
 

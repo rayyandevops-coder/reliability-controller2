@@ -1,31 +1,32 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: web2
+  name: sarathi
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: web2
+      app: sarathi
   template:
     metadata:
       labels:
-        app: web2
+        app: sarathi
     spec:
       containers:
-      - name: web2
-        image: rayyandevopss/web2-service:latest
+      - name: sarathi
+        image: rayyandevopss/sarathi-service:latest
         ports:
-        - containerPort: 5002
+        - containerPort: 5001
         imagePullPolicy: Always
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: web2-service
+  name: sarathi
 spec:
   selector:
-    app: web2
+    app: sarathi
   ports:
-    - port: 5002
-      targetPort: 5002
+    - port: 5001
+      targetPort: 5001
+  type: ClusterIP

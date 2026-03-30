@@ -1,11 +1,16 @@
-FROM python:3.10-slim
+FROM python:3.9-slim
 
 WORKDIR /app
 
+RUN apt-get update && apt-get install -y \
+    curl gcc && rm -rf /var/lib/apt/lists/*
+
+# install kubectl
+RUN curl -LO "https://dl.k8s.io/release/v1.29.0/bin/linux/amd64/kubectl" \
+    && install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+
 COPY . .
 
-RUN apt-get update && apt-get install -y docker.io
-RUN pip install flask
-RUN pip install requests
+RUN pip install flask requests
 
 CMD ["python", "app.py"]
