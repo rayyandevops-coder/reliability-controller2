@@ -2,15 +2,22 @@ FROM python:3.9-slim
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y \
-    curl gcc && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y gcc curl \
+    && rm -rf /var/lib/apt/lists/*
 
-# install kubectl
-RUN curl -LO "https://dl.k8s.io/release/v1.29.0/bin/linux/amd64/kubectl" \
-    && install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-RUN pip install flask requests
+ENV PYTHONUNBUFFERED=1
+
+RUN useradd -m appuser
+USER appuser
+
+EXPOSE 5003
+
+HEALTHCHECK --interval=10s --timeout=3s --retries=3 \
+  CMD curl -f http://localhost:5003/health || exit 1
 
 CMD ["python", "app.py"]

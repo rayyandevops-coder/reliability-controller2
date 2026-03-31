@@ -3,8 +3,7 @@ version: "3.8"
 services:
 
   web1:
-    build: ./web1
-    container_name: web1
+    image: rayyandevopss/web1-service:v1
     ports:
       - "5001:5001"
     networks:
@@ -13,8 +12,7 @@ services:
           - web1-service
 
   web2:
-    build: ./web2
-    container_name: web2
+    image: rayyandevopss/web2-service:v1
     ports:
       - "5002:5002"
     networks:
@@ -23,22 +21,20 @@ services:
           - web2-service
 
   sarathi:
-    build: ./sarathi
-    container_name: sarathi
+    image: rayyandevopss/sarathi-service:v1
     ports:
-      - "5005:5001"      # host 5005 → container 5001 (avoids clash with web1)
+      - "5005:5001"
     networks:
       monitor-network:
         aliases:
-          - sarathi      # executer calls http://sarathi:5001
+          - sarathi
 
   executer:
-    build: ./executer
-    container_name: executer
+    image: rayyandevopss/executer-service:v1
     ports:
       - "5003:5003"
     environment:
-      - EXECUTION_MODE=simulate    # change to "kubernetes" on cluster
+      - EXECUTION_MODE=simulate
       - SARATHI_URL=http://sarathi:5001/decision
       - PYTHONUNBUFFERED=1
     depends_on:
@@ -49,8 +45,7 @@ services:
           - executer-service
 
   monitor:
-    build: ./monitor
-    container_name: monitor
+    image: rayyandevopss/monitor-service:v1
     ports:
       - "5004:5004"
     environment:

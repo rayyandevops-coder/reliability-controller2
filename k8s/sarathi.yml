@@ -4,20 +4,46 @@ metadata:
   name: sarathi
 spec:
   replicas: 1
+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+
   selector:
     matchLabels:
       app: sarathi
+
   template:
     metadata:
       labels:
         app: sarathi
+
     spec:
       containers:
       - name: sarathi
-        image: rayyandevopss/sarathi-service:latest
+        image: rayyandevopss/sarathi-service:COMMIT_SHA
+
         ports:
         - containerPort: 5001
+
         imagePullPolicy: Always
+
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5001
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5001
+          initialDelaySeconds: 10
+          periodSeconds: 10
+
 ---
 apiVersion: v1
 kind: Service

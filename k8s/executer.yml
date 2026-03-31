@@ -4,19 +4,30 @@ metadata:
   name: executer
 spec:
   replicas: 1
+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+
   selector:
     matchLabels:
       app: executer
+
   template:
     metadata:
       labels:
         app: executer
+
     spec:
       containers:
       - name: executer
-        image: rayyandevopss/executer-service:latest
+        image: rayyandevopss/executer-service:COMMIT_SHA
+
         ports:
         - containerPort: 5003
+
         imagePullPolicy: Always
 
         env:
@@ -27,10 +38,25 @@ spec:
         - name: kube-config
           mountPath: /root/.kube
 
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5003
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5003
+          initialDelaySeconds: 10
+          periodSeconds: 10
+
       volumes:
       - name: kube-config
         hostPath:
           path: /root/.kube
+
 ---
 apiVersion: v1
 kind: Service
