@@ -23,7 +23,7 @@ spec:
     spec:
       containers:
       - name: sarathi
-        image: rayyandevopss/sarathi-service:COMMIT_SHA
+        image: rayyandevopss/sarathi-service:v1
 
         ports:
         - containerPort: 5001

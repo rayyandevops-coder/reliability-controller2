@@ -23,7 +23,7 @@ spec:
     spec:
       containers:
       - name: monitor
-        image: rayyandevopss/monitor-service:COMMIT_SHA
+        image: rayyandevopss/monitor-service:v1
 
         ports:
         - containerPort: 5004

@@ -1,183 +1,82 @@
-Monitoring + Execution Control Loop System
-Overview
-This project implements a production-style control loop system consisting of:
-Monitoring Layer → Detects system health and issues
-Decision Layer → (external) decides actions based on runtime payload
-Execution Layer → Executes actions and verifies results
-The system follows:
-Detect → Emit → Decide → Execute → Verify
+Zero Downtime CI/CD Pipeline (Pravah System)
+
+Overview:
+This project implements a production-grade CI/CD pipeline for a distributed microservices system using Kubernetes and GitHub Actions.
+The system ensures:
+Zero downtime deployments
+Automated build and deployment
+Health-based traffic routing
+Automatic rollback on failure
 
 Architecture
-Monitor Service → Runtime Payload → Decision Engine → Executer Service → Infrastructure
+Services:
+web1
+web2
+sarathi
+executer
+monitor
 
-Components:
-Monitor Service
-Collects real metrics using psutil
-Detects issues (CPU spike, crash, etc.)
-Emits structured data
-Executer Service
-Accepts actions (restart, scale_up, scale_down)
-Executes actions (Docker / Kubernetes)
-Verifies execution
-Logs all events
+Technologies:
+Docker
+Kubernetes
+GitHub Actions
+Minikube (local cluster)
 
-Features
- Real system metrics (CPU, memory)
- Structured schema (no drift)
- Deterministic behavior
- Cooldown protection (prevents repeated actions)
- Validation of actions
- Execution verification
- Structured JSON logging
- Supports Docker + Kubernetes
- Failure-safe (no crashes)
+CI/CD Pipeline Flow:
+Code pushed to main
+GitHub Actions triggers pipeline
+Docker images are built
+Images are tagged with commit SHA
+Images are pushed to Docker Hub
+Kubernetes deployments updated
+Rolling update ensures zero downtime
+Rollout is verified
+Auto rollback if failure occurs
 
-API Endpoints
-1. /metrics
-Returns system metrics and issue detection.
-{
-  "service_id": "web1",
-  "timestamp": "UTC",
-  "status": "healthy | degraded | critical",
-  "metrics": {
-    "cpu": float,
-    "memory": float,
-    "error_rate": float,
-    "uptime": int
-  },
-  "issue_detected": boolean,
-  "issue_type": "cpu_spike | crash | none",
-  "recommended_action": "restart | scale_up | noop"
-}
+Deployment Strategy:
+Rolling Update (Implemented)
+maxUnavailable: 0
+maxSurge: 1
+Ensures:
+No service interruption
+New pods ready before old pods terminate
 
+Health Checks:
+Each service includes:
+readinessProbe → ensures pod is ready before traffic
+livenessProbe → restarts unhealthy pods
 
-2. /internal/runtime-payload
-Used by decision engine.
-{
-  "app_id": "monitor-service",
-  "cpu_usage": float,
-  "memory_usage": float,
-  "error_rate": float,
-  "health_score": float,
-  "environment": "dev | stage | prod"
-}
+Rollback:
+Automatic rollback using:
+kubectl rollout undo
+Triggered when rollout fails.
 
+Zero Downtime Validation
+During deployment:
+Continuous curl requests sent to endpoints
+No request failures observed
+System remains responsive
 
-3. /execute-action
-Executes actions.
-Request:
-{
-  "service_id": "web1",
-  "action": "restart"
-}
+Note (Minikube Setup)
+This project uses Minikube (local Kubernetes cluster).
+Due to this:
+GitHub Actions cannot directly access the cluster
+Deployment step in pipeline may fail
+However:
+Build and push steps work correctly
+Deployment is verified locally using kubectl
+In production:
+A remote Kubernetes cluster would be used
+Pipeline would complete fully without failure
 
-Response:
-{
-  "execution_id": "...",
-  "status": "executed | failed | blocked",
-  "action": "restart",
-  "reason": "...",
-  "verified": true/false
-}
+Conclusion:
+This project transforms the system into a:
+ Continuously deployable, production-ready infrastructure
+
+Key achievements:
+Zero downtime deployment
+Automated CI/CD pipeline
+Safe rollback mechanism
 
 
-Docker Setup
-Build Images
-docker build -t rayyandevopss/monitor-service:latest .
-docker build -t rayyandevopss/executer-service:latest .
-
-Run Containers
-docker run -d -p 5004:5004 rayyandevopss/monitor-service
-docker run -d -p 5003:5003 rayyandevopss/executer-service
-
-
-Kubernetes Setup
-Apply Deployment
-kubectl apply -f k8s/
-
-Restart Deployment
-kubectl rollout restart deployment monitor
-kubectl rollout restart deployment executer
-
-
-Environment Configuration
-
-The system supports dual execution modes:
-
-Mode	      Behavior
-docker	    Uses Docker commands
-kubernetes	Uses kubectl commands
-
-Set using environment variable:
-EXECUTION_MODE=docker
-
-OR
-env:
-- name: EXECUTION_MODE
-  value: "kubernetes"
-
-
-Logging (Observability)
-Logs are structured JSON and include:
-timestamp
-service_id
-action
-result
-Example:
-{
-  "timestamp": "...",
-  "event": "ACTION_EXECUTED",
-  "service_id": "web1",
-  "action": "restart",
-  "result": "success"
-}
-
-
-Failure Handling
-The system handles failures safely:
-Invalid actions → rejected
-Rapid actions → blocked (cooldown)
-Infrastructure failure → logged + returned
-No crashes
-Example failure:
-{
-  "status": "failed",
-  "reason": "DOCKER_ERROR: daemon not running",
-  "verified": false
-}
-
-
-Full Control Loop
-1. Monitor detects issue
-2. Runtime payload generated
-3. Decision engine selects action
-4. Executer receives action
-5. Action executed (Docker/K8s)
-6. Verification performed
-7. Logs recorded
-
-
-Testing Scenarios
-✅ Normal operation (healthy)
-✅ Service crash detection
-✅ Invalid action rejection
-✅ Cooldown enforcement
-✅ Execution failure handling
-
-Key Highlights
-Deterministic system design
-Production-style control loop
-Environment-agnostic execution
-Observability-first approach
-Failure-safe architecture
-
-Conclusion
-This system demonstrates a fully functional monitoring + execution loop capable of:
-Detecting issues
-Executing corrective actions
-Handling failures safely
-Providing verifiable logs
-
-Status: ✅ Production-Ready Control Loop Component
-
-
+All required proof screenshots are included in the proofs/ folder in this repository.

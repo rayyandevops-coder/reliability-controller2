@@ -23,7 +23,7 @@ spec:
     spec:
       containers:
       - name: web1
-        image: rayyandevopss/web1-service:COMMIT_SHA
+        image: rayyandevopss/web1-service:v1
 
         ports:
         - containerPort: 5001

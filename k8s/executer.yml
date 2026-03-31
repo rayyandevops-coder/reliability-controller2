@@ -23,7 +23,7 @@ spec:
     spec:
       containers:
       - name: executer
-        image: rayyandevopss/executer-service:COMMIT_SHA
+        image: rayyandevopss/executer-service:v1
 
         ports:
         - containerPort: 5003
