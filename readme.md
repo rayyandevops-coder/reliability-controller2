@@ -1,82 +1,72 @@
-Zero Downtime CI/CD Pipeline (Pravah System)
+Pravah CI CD Pipeline
 
-Overview:
-This project implements a production-grade CI/CD pipeline for a distributed microservices system using Kubernetes and GitHub Actions.
-The system ensures:
-Zero downtime deployments
-Automated build and deployment
-Health-based traffic routing
-Automatic rollback on failure
+Overview
+Pravah is a microservices system deployed using a CI CD pipeline with zero downtime and automatic rollback. The system is containerized using Docker and deployed on a Kubernetes cluster running on AWS EC2.
 
-Architecture
-Services:
+Services
 web1
 web2
 sarathi
 executer
 monitor
 
-Technologies:
+Each service runs in its own container and communicates using Kubernetes services.
+
+Tech Stack
 Docker
 Kubernetes
 GitHub Actions
-Minikube (local cluster)
+AWS EC2
+Linux
 
-CI/CD Pipeline Flow:
-Code pushed to main
-GitHub Actions triggers pipeline
-Docker images are built
-Images are tagged with commit SHA
-Images are pushed to Docker Hub
-Kubernetes deployments updated
-Rolling update ensures zero downtime
-Rollout is verified
-Auto rollback if failure occurs
+CI CD Pipeline Flow
+Trigger on push to main branch
 
-Deployment Strategy:
-Rolling Update (Implemented)
-maxUnavailable: 0
-maxSurge: 1
-Ensures:
-No service interruption
-New pods ready before old pods terminate
+Steps
+Build Docker images
+Tag images using commit SHA
+Push images to Docker Hub
+Connect to Kubernetes cluster
+Apply Kubernetes manifests
+Update deployments
+Verify rollout
+Rollback if failure
 
-Health Checks:
-Each service includes:
-readinessProbe → ensures pod is ready before traffic
-livenessProbe → restarts unhealthy pods
+Deployment Strategy
+Rolling update
+maxUnavailable 0
+maxSurge 1
 
-Rollback:
-Automatic rollback using:
-kubectl rollout undo
-Triggered when rollout fails.
+Ensures at least one pod is always running with no downtime.
 
-Zero Downtime Validation
-During deployment:
-Continuous curl requests sent to endpoints
-No request failures observed
-System remains responsive
+Health Checks
+Each service uses readiness probe and liveness probe to ensure only healthy pods receive traffic.
 
-Note (Minikube Setup)
-This project uses Minikube (local Kubernetes cluster).
-Due to this:
-GitHub Actions cannot directly access the cluster
-Deployment step in pipeline may fail
-However:
-Build and push steps work correctly
-Deployment is verified locally using kubectl
-In production:
-A remote Kubernetes cluster would be used
-Pipeline would complete fully without failure
+Rollback
+If deployment fails the pipeline runs kubectl rollout undo and restores the previous version.
 
-Conclusion:
-This project transforms the system into a:
- Continuously deployable, production-ready infrastructure
+Access
+http://EC2 PUBLIC IP 30001 health
 
-Key achievements:
-Zero downtime deployment
-Automated CI/CD pipeline
-Safe rollback mechanism
+Zero Downtime Test
+Run continuous curl on health endpoint while triggering deployment and observe no failures.
 
+Project Structure
+monitor_latest
+.github workflows deploy.yml
+executer
+k8s
+monitor
+sarathi
+web1
+web2
+docker-compose.yml
 
-All required proof screenshots are included in the proofs/ folder in this repository.
+Final Result
+Fully automated CI CD pipeline
+Zero downtime deployment achieved
+Remote Kubernetes deployment working
+Production ready setup
+
+Author
+Rayyan Shaikh
