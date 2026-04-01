@@ -1,72 +1,52 @@
-Pravah CI CD Pipeline
+Pravah CI CD Production Deployment
 
 Overview
-Pravah is a microservices system deployed using a CI CD pipeline with zero downtime and automatic rollback. The system is containerized using Docker and deployed on a Kubernetes cluster running on AWS EC2.
+This project implements a production grade CI CD pipeline for Pravah. The system is deployed on a Kubernetes cluster set up on AWS EC2 and fully managed. The pipeline performs real deployment with zero downtime and automatic rollback.
 
-Services
-web1
-web2
-sarathi
-executer
-monitor
+Cluster Setup
+A Kubernetes cluster was created on AWS EC2 using kubeadm. The system was first deployed manually and verified. The cluster is fully managed and used for all CI CD deployments.
 
-Each service runs in its own container and communicates using Kubernetes services.
-
-Tech Stack
-Docker
-Kubernetes
-GitHub Actions
-AWS EC2
-Linux
-
-CI CD Pipeline Flow
-Trigger on push to main branch
+CI CD Pipeline
+Trigger
+Pipeline runs on every push to main branch
 
 Steps
 Build Docker images
 Tag images using commit SHA
 Push images to Docker Hub
-Connect to Kubernetes cluster
+Authenticate to Kubernetes cluster using kubeconfig
 Apply Kubernetes manifests
-Update deployments
-Verify rollout
-Rollback if failure
-
-Deployment Strategy
-Rolling update
-maxUnavailable 0
-maxSurge 1
-
-Ensures at least one pod is always running with no downtime.
-
-Health Checks
-Each service uses readiness probe and liveness probe to ensure only healthy pods receive traffic.
+Wait for rollout
+Fail if rollout fails
 
 Rollback
-If deployment fails the pipeline runs kubectl rollout undo and restores the previous version.
+If deployment fails the pipeline automatically runs rollout undo and restores the previous version.
+
+Zero Downtime
+Rolling update strategy ensures no service interruption. During deployment health and metrics endpoints remain available.
 
 Access
-http://EC2 PUBLIC IP 30001 health
+Application
+http://98.92.84.149:30001/health
 
-Zero Downtime Test
-Run continuous curl on health endpoint while triggering deployment and observe no failures.
+Metrics
+http://98.92.84.149:30004/metrics
 
-Project Structure
-monitor_latest
-.github workflows deploy.yml
-executer
-k8s
-monitor
-sarathi
-web1
-web2
-docker-compose.yml
+Environment
+Namespace used prod
 
-Final Result
-Fully automated CI CD pipeline
-Zero downtime deployment achieved
-Remote Kubernetes deployment working
-Production ready setup
+Proof
+Pipeline logs
+Pods before and after deployment
+Zero downtime curl output
+All screenshots are in proofs folder
+
+Result
+CI CD pipeline deploys to real cluster
+No manual steps required
+Zero downtime achieved
+Rollback working
+Kubernetes cluster deployed on EC2 and fully managed
 
 Author
 Rayyan Shaikh

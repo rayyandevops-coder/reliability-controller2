@@ -1,59 +1,47 @@
 Review Packet Pravah CI CD
 
-Entry Point
+1 Entry Point
 Pipeline is triggered on push to main branch using GitHub Actions.
 
-Pipeline Flow
-Code pushed to repository
-Pipeline starts
+2 Pipeline Flow
+Code push triggers pipeline
 Docker images are built
-Images tagged with commit SHA
-Images pushed to Docker Hub
-Kubernetes cluster accessed using kubeconfig
-Manifests applied
-Deployments updated
-Rollout verified
-Rollback triggered if failure
+Images are tagged with commit SHA
+Images are pushed to Docker Hub
+Kubernetes cluster on EC2 is accessed securely using kubeconfig
+Manifests are applied
+Deployments are updated using rolling update
+Rollout is verified and pipeline fails if rollout fails
 
-Live Deployment
-Cluster running on AWS EC2
-Namespace used prod
-All services deployed and running
+3 Live Deployment
+Deployment is performed on a real Kubernetes cluster running on AWS EC2
+Namespace used is prod
+All services are running and accessible
 
-Changes from Previous Task
-Local cluster replaced with EC2 cluster
-Manual deployment replaced with automated pipeline
-Rolling updates added
-Rollback added
+4 What Changed
+Local Minikube setup replaced with real EC2 cluster
+Manual deployment replaced with automated CI CD pipeline
+Rolling updates implemented
+Automatic rollback added
 
-Failure and Rollback
-If rollout fails pipeline executes rollback command
-Previous stable version restored automatically
+5 Failure and Rollback Behavior
+If rollout fails pipeline detects failure
+Rollback is triggered automatically using rollout undo
+Previous stable version is restored
 
-Proof
-Pipeline logs showing build and deploy
+6 Proof
+Pipeline execution logs
 Pods before deployment
 Pods during deployment
 Pods after deployment
 Continuous curl output showing no downtime
+Metrics endpoint accessible
 
-Commands Used
-kubectl get pods
-kubectl rollout status
-kubectl rollout undo
-
-Observability
-Deployment start
-Pod creation
-Readiness achieved
-Old pod termination
-Rollout success or failure
-
-Final Result
+Result
 System is continuously deployable
-Zero downtime achieved
+Zero downtime verified
 Rollback working
-Production ready
+Production deployment achieved on EC2 cluster
 
 Submitted by
 Rayyan Shaikh
