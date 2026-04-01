@@ -2,70 +2,64 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: executer
+  namespace: prod
 spec:
   replicas: 1
-
   strategy:
     type: RollingUpdate
     rollingUpdate:
       maxUnavailable: 0
       maxSurge: 1
-
   selector:
     matchLabels:
       app: executer
-
   template:
     metadata:
       labels:
         app: executer
-
     spec:
       containers:
       - name: executer
-        image: rayyandevopss/executer-service:v1
-
+        image: rayyandevopss/executer-service:COMMIT_SHA
+        imagePullPolicy: Always
         ports:
         - containerPort: 5003
-
-        imagePullPolicy: Always
 
         env:
         - name: EXECUTION_MODE
           value: "kubernetes"
+        - name: SARATHI_URL
+          value: "http://sarathi-service:5001/decision"
 
-        volumeMounts:
-        - name: kube-config
-          mountPath: /root/.kube
+        resources:
+          requests:
+            memory: "100Mi"
+            cpu: "100m"
+          limits:
+            memory: "200Mi"
+            cpu: "200m"
 
         readinessProbe:
           httpGet:
             path: /health
             port: 5003
           initialDelaySeconds: 5
-          periodSeconds: 5
 
         livenessProbe:
           httpGet:
             path: /health
             port: 5003
           initialDelaySeconds: 10
-          periodSeconds: 10
-
-      volumes:
-      - name: kube-config
-        hostPath:
-          path: /root/.kube
 
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: executer-service
+  namespace: prod
 spec:
   selector:
     app: executer
   ports:
     - port: 5003
       targetPort: 5003
-  type: ClusterIP
