@@ -43,9 +43,9 @@ spec:
           httpGet:
             path: /health
             port: 5003
-          initialDelaySeconds: 5
+          initialDelaySeconds: 10
           periodSeconds: 5
-          failureThreshold: 3
+          failureThreshold: 5
 
         livenessProbe:
           httpGet:

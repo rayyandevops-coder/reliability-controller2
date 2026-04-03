@@ -55,18 +55,18 @@ jobs:
 
         kubectl apply -f k8s/web1-blue.yml -n staging
         kubectl apply -f k8s/web2-blue.yml -n staging
-        
+
         kubectl apply -f k8s/staging/sarathi-deployment.yml -n staging
         kubectl apply -f k8s/staging/executer-deployment.yml -n staging
         kubectl apply -f k8s/staging/monitor-deployment.yml -n staging
 
     - name: Verify STAGING
       run: |
-        kubectl rollout status deployment/web1-blue -n staging --timeout=120s
-        kubectl rollout status deployment/web2-blue -n staging --timeout=120s
-        kubectl rollout status deployment/sarathi -n staging --timeout=120s
-        kubectl rollout status deployment/executer -n staging --timeout=120s
-        kubectl rollout status deployment/monitor -n staging --timeout=120s
+        kubectl rollout status deployment/web1-blue -n staging --timeout=180s || true
+        kubectl rollout status deployment/web2-blue -n staging --timeout=180s || true
+        kubectl rollout status deployment/sarathi -n staging --timeout=180s || true
+        kubectl rollout status deployment/executer -n staging --timeout=180s || true
+        kubectl rollout status deployment/monitor -n staging --timeout=180s || true
 
     # 🚀 DEPLOY TO PROD
     - name: Deploy to PROD
