@@ -35,8 +35,8 @@ No manual intervention is required at any stage.
 
 Live endpoints:
 
-* Application: http://98.92.84.149:30001/health
-* Metrics: http://98.92.84.149:30004/metrics
+* Application: http://18.207.240.7:30001/health
+* Metrics: http://18.207.240.7:30004/metrics
 
 ---
 
@@ -76,7 +76,7 @@ Live endpoints:
 Test performed using continuous curl:
 
 ```bash
-while true; do curl http://98.92.84.149:30001/health; done
+while true; do curl http://18.207.240.7:30001/health; done
 ```
 
 During deployment:
