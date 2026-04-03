@@ -1,3 +1,4 @@
+from deployment_status import deployment_bp
 from flask import Flask, jsonify
 import requests
 import time
@@ -154,3 +155,5 @@ if __name__ == "__main__":
     t.start()
 
     app.run(host="0.0.0.0", port=5004, use_reloader=False)
+
+app.register_blueprint(deployment_bp)

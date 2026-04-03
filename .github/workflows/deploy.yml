@@ -1,4 +1,4 @@
-name: CI-CD Pipeline (FINAL CLEAN)
+name: CI-CD Pipeline (PRODUCTION SAFE)
 
 on:
   push:
@@ -7,6 +7,7 @@ on:
 
 env:
   IMAGE_PREFIX: rayyandevopss
+  NODE_IP: 18.207.240.7
 
 jobs:
   deploy:
@@ -21,7 +22,7 @@ jobs:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
 
-    # 🐳 Build images
+    # 🐳 Build & Push Images
     - name: Build & Push
       run: |
         docker build -t $IMAGE_PREFIX/web1-service:latest ./web1
@@ -43,29 +44,62 @@ jobs:
         mkdir -p $HOME/.kube
         echo "${{ secrets.KUBECONFIG }}" > $HOME/.kube/config
 
-    # 🚀 APPLY EVERYTHING (IMPORTANT)
-    - name: Apply ALL manifests
+    # 🧪 STAGING DEPLOYMENT
+    - name: Deploy to STAGING
+      run: |
+        kubectl create namespace staging || true
+        kubectl apply -f k8s/ -n staging
+
+    - name: Verify STAGING
+      run: |
+        kubectl rollout status deployment/web1-blue -n staging --timeout=120s
+        kubectl rollout status deployment/web2-blue -n staging --timeout=120s
+
+    # 🚀 PRODUCTION DEPLOYMENT
+    - name: Deploy to PROD
       run: |
         kubectl apply -f k8s/ -n prod
 
-    # 🔄 Wait for all deployments
-    - name: Wait for deployments
+    # 🔒 STRICT ROLLOUT CHECK
+    - name: Wait for deployments (STRICT)
       run: |
-        kubectl rollout status deployment/web1-blue -n prod --timeout=120s || true
-        kubectl rollout status deployment/web2-blue -n prod --timeout=120s || true
+        set -e
+        kubectl rollout status deployment/web1-blue -n prod --timeout=120s
+        kubectl rollout status deployment/web2-blue -n prod --timeout=120s
         kubectl rollout status deployment/sarathi -n prod --timeout=120s
         kubectl rollout status deployment/executer -n prod --timeout=120s
         kubectl rollout status deployment/monitor -n prod --timeout=120s
 
-    # 🔵🟢 Switch to GREEN
+    # ❤️ HEALTH CHECK GATE
+    - name: Health Check Gate
+      run: |
+        curl -f http://$NODE_IP:30001/health
+        curl -f http://$NODE_IP:30002/health
+        curl -f http://$NODE_IP:30004/health
+
+    # 🔵🟢 SWITCH TRAFFIC
     - name: Switch Traffic
       run: |
-        kubectl patch svc web1-service -n prod -p '{"spec":{"selector":{"app":"web1","version":"green"}}}' || true
-        kubectl patch svc web2-service -n prod -p '{"spec":{"selector":{"app":"web2","version":"green"}}}' || true
+        kubectl patch svc web1-service -n prod -p '{"spec":{"selector":{"app":"web1","version":"green"}}}'
+        kubectl patch svc web2-service -n prod -p '{"spec":{"selector":{"app":"web2","version":"green"}}}'
 
-    # 🔁 Rollback
-    - name: Rollback
+    # 🔁 ROLLBACK (HARDENED)
+    - name: Rollback Deployments
       if: failure()
       run: |
+        kubectl rollout undo deployment/web1-blue -n prod
+        kubectl rollout undo deployment/web2-blue -n prod
+        kubectl rollout undo deployment/sarathi -n prod
+        kubectl rollout undo deployment/executer -n prod
+        kubectl rollout undo deployment/monitor -n prod
+
         kubectl patch svc web1-service -n prod -p '{"spec":{"selector":{"app":"web1","version":"blue"}}}' || true
         kubectl patch svc web2-service -n prod -p '{"spec":{"selector":{"app":"web2","version":"blue"}}}' || true
+
+    # 🚨 ALERTING
+    - name: Send Alert on Failure
+      if: failure()
+      run: |
+        curl -X POST https://webhook.site/YOUR_ID \
+        -H "Content-Type: application/json" \
+        -d '{"status":"FAILED","message":"Deployment failed"}'
