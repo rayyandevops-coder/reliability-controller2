@@ -1,4 +1,4 @@
-name: CI-CD Pipeline (Zero Downtime)
+name: CI-CD Pipeline (Blue-Green + Rolling)
 
 on:
   push:
@@ -15,15 +15,18 @@ jobs:
 
     steps:
 
+    # 📥 Checkout
     - name: Checkout Code
       uses: actions/checkout@v4
 
+    # 🔐 Docker Login
     - name: Docker Login
       uses: docker/login-action@v3
       with:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
 
+    # 🐳 Build & Push Images
     - name: Build and Push Images
       run: |
         docker build -t $IMAGE_PREFIX/web1-service:${{ github.sha }} ./web1
@@ -38,39 +41,72 @@ jobs:
         docker push $IMAGE_PREFIX/executer-service:${{ github.sha }}
         docker push $IMAGE_PREFIX/monitor-service:${{ github.sha }}
 
+    # ☸️ Setup kubectl
     - name: Setup kubectl
       uses: azure/setup-kubectl@v4
 
+    # 🔐 Configure cluster access
     - name: Configure Kubernetes
       run: |
         mkdir -p $HOME/.kube
         echo "${{ secrets.KUBECONFIG }}" > $HOME/.kube/config
 
-    - name: Apply Kubernetes Manifests
+    # 📦 Apply base manifests
+    - name: Apply Base Manifests
       run: |
-        kubectl apply -f k8s/
+        kubectl apply -f k8s/sarathi.yml -n prod
+        kubectl apply -f k8s/executer.yml -n prod
+        kubectl apply -f k8s/monitor.yml -n prod
 
-    - name: Update Images
+    # 🔄 Update Rolling Services
+    - name: Update Rolling Services
       run: |
-        kubectl set image deployment/web1 web1=$IMAGE_PREFIX/web1-service:${{ github.sha }} -n prod
-        kubectl set image deployment/web2 web2=$IMAGE_PREFIX/web2-service:${{ github.sha }} -n prod
         kubectl set image deployment/sarathi sarathi=$IMAGE_PREFIX/sarathi-service:${{ github.sha }} -n prod
         kubectl set image deployment/executer executer=$IMAGE_PREFIX/executer-service:${{ github.sha }} -n prod
         kubectl set image deployment/monitor monitor=$IMAGE_PREFIX/monitor-service:${{ github.sha }} -n prod
 
+    # 🔵🟢 Deploy GREEN versions (Blue-Green)
+    - name: Deploy Green (web1 & web2)
+      run: |
+        kubectl apply -f k8s/web1-green.yml -n prod
+        kubectl apply -f k8s/web2-green.yml -n prod
+
+    # ✅ Wait for GREEN rollout
+    - name: Verify Green Rollout
+      run: |
+        kubectl rollout status deployment/web1-green -n prod --timeout=90s
+        kubectl rollout status deployment/web2-green -n prod --timeout=90s
+
+    # 🔄 Switch traffic to GREEN
+    - name: Switch Traffic to Green
+      run: |
+        kubectl patch svc web1-service -n prod \
+        -p '{"spec":{"selector":{"app":"web1","version":"green"}}}'
+
+        kubectl patch svc web2-service -n prod \
+        -p '{"spec":{"selector":{"app":"web2","version":"green"}}}'
+
+    # ✅ Verify all services
     - name: Verify Rollout
       run: |
-        kubectl rollout status deployment/web1 -n prod --timeout=60s
-        kubectl rollout status deployment/web2 -n prod --timeout=60s
-        kubectl rollout status deployment/sarathi -n prod --timeout=60s
-        kubectl rollout status deployment/executer -n prod --timeout=60s
-        kubectl rollout status deployment/monitor -n prod --timeout=60s
+        kubectl rollout status deployment/sarathi -n prod --timeout=90s
+        kubectl rollout status deployment/executer -n prod --timeout=90s
+        kubectl rollout status deployment/monitor -n prod --timeout=90s
 
-    - name: Rollback on Failure
+    # 🔁 Rollback on failure
+    - name: Rollback (Blue-Green + Rolling)
       if: failure()
       run: |
-        kubectl rollout undo deployment/web1 -n prod
-        kubectl rollout undo deployment/web2 -n prod
+        echo "Failure detected. Rolling back..."
+
+        # Switch traffic back to BLUE
+        kubectl patch svc web1-service -n prod \
+        -p '{"spec":{"selector":{"app":"web1","version":"blue"}}}'
+
+        kubectl patch svc web2-service -n prod \
+        -p '{"spec":{"selector":{"app":"web2","version":"blue"}}}'
+
+        # Rollback rolling deployments
         kubectl rollout undo deployment/sarathi -n prod
         kubectl rollout undo deployment/executer -n prod
         kubectl rollout undo deployment/monitor -n prod

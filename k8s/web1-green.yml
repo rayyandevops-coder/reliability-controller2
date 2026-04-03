@@ -1,37 +1,26 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: sarathi
+  name: web1-green
 spec:
   replicas: 2
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxUnavailable: 0
-      maxSurge: 1
   selector:
     matchLabels:
-      app: sarathi
+      app: web1
+      version: green
   template:
     metadata:
       labels:
-        app: sarathi
+        app: web1
+        version: green
     spec:
       containers:
-      - name: sarathi
-        image: rayyandevopss/sarathi-service:COMMIT_SHA
+      - name: web1
+        image: rayyandevopss/web1-service:COMMIT_SHA
         imagePullPolicy: Always
 
         ports:
         - containerPort: 5001
-
-        resources:
-          requests:
-            memory: "100Mi"
-            cpu: "100m"
-          limits:
-            memory: "200Mi"
-            cpu: "200m"
 
         readinessProbe:
           httpGet:
@@ -39,7 +28,6 @@ spec:
             port: 5001
           initialDelaySeconds: 5
           periodSeconds: 5
-          failureThreshold: 3
 
         livenessProbe:
           httpGet:
@@ -47,7 +35,6 @@ spec:
             port: 5001
           initialDelaySeconds: 10
           periodSeconds: 10
-          failureThreshold: 3
 
         lifecycle:
           preStop:
@@ -55,15 +42,3 @@ spec:
               command: ["sh", "-c", "sleep 5"]
 
       terminationGracePeriodSeconds: 10
-
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: sarathi-service
-spec:
-  selector:
-    app: sarathi
-  ports:
-    - port: 5001
-      targetPort: 5001
