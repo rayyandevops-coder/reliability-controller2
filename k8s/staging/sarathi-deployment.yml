@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sarathi
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: sarathi
+  template:
+    metadata:
+      labels:
+        app: sarathi
+    spec:
+      containers:
+      - name: sarathi
+        image: rayyandevopss/sarathi-service:latest
+        ports:
+        - containerPort: 5001

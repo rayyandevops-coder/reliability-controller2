@@ -55,9 +55,10 @@ jobs:
 
         kubectl apply -f k8s/web1-blue.yml -n staging
         kubectl apply -f k8s/web2-blue.yml -n staging
-        kubectl apply -f k8s/sarathi.yml -n staging
-        kubectl apply -f k8s/executer.yml -n staging
-        kubectl apply -f k8s/monitor.yml -n staging
+        
+        kubectl apply -f k8s/staging/sarathi-deployment.yml -n staging
+        kubectl apply -f k8s/staging/executer-deployment.yml -n staging
+        kubectl apply -f k8s/staging/monitor-deployment.yml -n staging
 
     - name: Verify STAGING
       run: |
