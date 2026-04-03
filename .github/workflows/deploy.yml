@@ -1,4 +1,4 @@
-name: CI-CD Pipeline (PRODUCTION SAFE)
+name: CI-CD Pipeline (PRODUCTION SAFE FINAL)
 
 on:
   push:
@@ -22,20 +22,24 @@ jobs:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
 
-    # 🐳 Build & Push Images
+    # 🔖 UNIQUE IMAGE TAG (IMPORTANT FOR ROLLBACK)
+    - name: Set Image Tag
+      run: echo "TAG=${GITHUB_SHA}" >> $GITHUB_ENV
+
+    # 🐳 BUILD & PUSH
     - name: Build & Push
       run: |
-        docker build -t $IMAGE_PREFIX/web1-service:latest ./web1
-        docker build -t $IMAGE_PREFIX/web2-service:latest ./web2
-        docker build -t $IMAGE_PREFIX/sarathi-service:latest ./sarathi
-        docker build -t $IMAGE_PREFIX/executer-service:latest ./executer
-        docker build -t $IMAGE_PREFIX/monitor-service:latest ./monitor
+        docker build -t $IMAGE_PREFIX/web1-service:$TAG ./web1
+        docker build -t $IMAGE_PREFIX/web2-service:$TAG ./web2
+        docker build -t $IMAGE_PREFIX/sarathi-service:$TAG ./sarathi
+        docker build -t $IMAGE_PREFIX/executer-service:$TAG ./executer
+        docker build -t $IMAGE_PREFIX/monitor-service:$TAG ./monitor
 
-        docker push $IMAGE_PREFIX/web1-service:latest
-        docker push $IMAGE_PREFIX/web2-service:latest
-        docker push $IMAGE_PREFIX/sarathi-service:latest
-        docker push $IMAGE_PREFIX/executer-service:latest
-        docker push $IMAGE_PREFIX/monitor-service:latest
+        docker push $IMAGE_PREFIX/web1-service:$TAG
+        docker push $IMAGE_PREFIX/web2-service:$TAG
+        docker push $IMAGE_PREFIX/sarathi-service:$TAG
+        docker push $IMAGE_PREFIX/executer-service:$TAG
+        docker push $IMAGE_PREFIX/monitor-service:$TAG
 
     - uses: azure/setup-kubectl@v4
 
@@ -44,23 +48,40 @@ jobs:
         mkdir -p $HOME/.kube
         echo "${{ secrets.KUBECONFIG }}" > $HOME/.kube/config
 
-    # 🧪 STAGING DEPLOYMENT
+    # 🧪 STAGING (NO SERVICES → NO NODEPORT CONFLICT)
     - name: Deploy to STAGING
       run: |
         kubectl create namespace staging || true
-        kubectl apply -f k8s/ -n staging
+
+        kubectl apply -f k8s/web1-blue.yml -n staging
+        kubectl apply -f k8s/web2-blue.yml -n staging
+        kubectl apply -f k8s/sarathi.yml -n staging
+        kubectl apply -f k8s/executer.yml -n staging
+        kubectl apply -f k8s/monitor.yml -n staging
 
     - name: Verify STAGING
       run: |
         kubectl rollout status deployment/web1-blue -n staging --timeout=120s
         kubectl rollout status deployment/web2-blue -n staging --timeout=120s
+        kubectl rollout status deployment/sarathi -n staging --timeout=120s
+        kubectl rollout status deployment/executer -n staging --timeout=120s
+        kubectl rollout status deployment/monitor -n staging --timeout=120s
 
-    # 🚀 PRODUCTION DEPLOYMENT
+    # 🚀 DEPLOY TO PROD
     - name: Deploy to PROD
       run: |
         kubectl apply -f k8s/ -n prod
 
-    # 🔒 STRICT ROLLOUT CHECK
+    # 🔄 UPDATE IMAGES (ENABLE ROLLBACK HISTORY)
+    - name: Update Images
+      run: |
+        kubectl set image deployment/web1-blue web1=$IMAGE_PREFIX/web1-service:$TAG -n prod
+        kubectl set image deployment/web2-blue web2=$IMAGE_PREFIX/web2-service:$TAG -n prod
+        kubectl set image deployment/sarathi sarathi=$IMAGE_PREFIX/sarathi-service:$TAG -n prod
+        kubectl set image deployment/executer executer=$IMAGE_PREFIX/executer-service:$TAG -n prod
+        kubectl set image deployment/monitor monitor=$IMAGE_PREFIX/monitor-service:$TAG -n prod
+
+    # 🔒 STRICT CHECK (NO SILENT FAILURES)
     - name: Wait for deployments (STRICT)
       run: |
         set -e
@@ -70,7 +91,7 @@ jobs:
         kubectl rollout status deployment/executer -n prod --timeout=120s
         kubectl rollout status deployment/monitor -n prod --timeout=120s
 
-    # ❤️ HEALTH CHECK GATE
+    # ❤️ HEALTH GATE
     - name: Health Check Gate
       run: |
         curl -f http://$NODE_IP:30001/health
@@ -83,20 +104,20 @@ jobs:
         kubectl patch svc web1-service -n prod -p '{"spec":{"selector":{"app":"web1","version":"green"}}}'
         kubectl patch svc web2-service -n prod -p '{"spec":{"selector":{"app":"web2","version":"green"}}}'
 
-    # 🔁 ROLLBACK (HARDENED)
+    # 🔁 ROLLBACK (SAFE)
     - name: Rollback Deployments
       if: failure()
       run: |
-        kubectl rollout undo deployment/web1-blue -n prod
-        kubectl rollout undo deployment/web2-blue -n prod
-        kubectl rollout undo deployment/sarathi -n prod
-        kubectl rollout undo deployment/executer -n prod
-        kubectl rollout undo deployment/monitor -n prod
+        kubectl rollout undo deployment/web1-blue -n prod || true
+        kubectl rollout undo deployment/web2-blue -n prod || true
+        kubectl rollout undo deployment/sarathi -n prod || true
+        kubectl rollout undo deployment/executer -n prod || true
+        kubectl rollout undo deployment/monitor -n prod || true
 
         kubectl patch svc web1-service -n prod -p '{"spec":{"selector":{"app":"web1","version":"blue"}}}' || true
         kubectl patch svc web2-service -n prod -p '{"spec":{"selector":{"app":"web2","version":"blue"}}}' || true
 
-    # 🚨 ALERTING
+    # 🚨 ALERT
     - name: Send Alert on Failure
       if: failure()
       run: |
