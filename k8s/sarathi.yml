@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
       - name: sarathi
-        image: rayyandevopss/sarathi-service:COMMIT_SHA
+        image: rayyandevopss/sarathi-service:latest
         imagePullPolicy: Always
 
         ports:

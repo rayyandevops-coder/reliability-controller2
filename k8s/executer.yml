@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
       - name: executer
-        image: rayyandevopss/executer-service:COMMIT_SHA
+        image: rayyandevopss/executer-service:latest
         imagePullPolicy: Always
 
         ports:
