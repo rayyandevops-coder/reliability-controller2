@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: web1
-        image: rayyandevopss/web1-service:OLD_VERSION
+        image: rayyandevopss/web1-service:latest
         imagePullPolicy: Always
 
         ports:

@@ -1,39 +1,39 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: web1-green
+  name: web2-green
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: web1
+      app: web2
       version: green
   template:
     metadata:
       labels:
-        app: web1
+        app: web2
         version: green
     spec:
       containers:
-      - name: web1
-        image: rayyandevopss/web1-service:COMMIT_SHA
+      - name: web2
+        image: rayyandevopss/web2-service:latest
         imagePullPolicy: Always
 
         ports:
-        - containerPort: 5001
+        - containerPort: 5002
 
         readinessProbe:
           httpGet:
-            path: /health
-            port: 5001
-          initialDelaySeconds: 5
+            path: /
+            port: 5002
+          initialDelaySeconds: 10
           periodSeconds: 5
 
         livenessProbe:
           httpGet:
-            path: /health
-            port: 5001
-          initialDelaySeconds: 10
+            path: /
+            port: 5002
+          initialDelaySeconds: 20
           periodSeconds: 10
 
         lifecycle:
