@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: web2-green
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: web2

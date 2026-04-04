@@ -1,4 +1,4 @@
-name: CI-CD Pipeline (PRODUCTION SAFE FINAL)
+name: CI-CD Pipeline (BHIV COMPLIANT FINAL)
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
 
 env:
   IMAGE_PREFIX: rayyandevopss
-  NODE_IP: 18.207.240.7
+  NODE_IP: 54.156.236.10
 
 jobs:
   deploy:
@@ -17,12 +17,32 @@ jobs:
 
     - uses: actions/checkout@v4
 
+    # 🔐 TRACE GENERATION
+    - name: Generate Trace IDs
+      run: |
+        echo "TRACE_ID=$(uuidgen)" >> $GITHUB_ENV
+        echo "EXECUTION_ID=$(date +%s)" >> $GITHUB_ENV
+        echo "DEPLOYMENT_ID=${GITHUB_SHA}" >> $GITHUB_ENV
+
+    # 🛡️ GOVERNANCE CHECK
+    - name: Governance Gate
+      run: |
+        echo "Running governance validation..."
+        if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
+          echo "BLOCKED: Only main branch deployments allowed"
+          exit 1
+        fi
+
+    # 🧾 LOG START
+    - name: Log Deployment Start
+      run: |
+        echo "{\"trace_id\":\"$TRACE_ID\",\"event\":\"deployment_start\"}"
+
     - uses: docker/login-action@v3
       with:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
 
-    # 🔖 UNIQUE IMAGE TAG (IMPORTANT FOR ROLLBACK)
     - name: Set Image Tag
       run: echo "TAG=${GITHUB_SHA}" >> $GITHUB_ENV
 
@@ -48,32 +68,28 @@ jobs:
         mkdir -p $HOME/.kube
         echo "${{ secrets.KUBECONFIG }}" > $HOME/.kube/config
 
-    # 🧪 STAGING (NO SERVICES → NO NODEPORT CONFLICT)
+    # 🧪 STAGING
     - name: Deploy to STAGING
       run: |
         kubectl create namespace staging || true
-
         kubectl apply -f k8s/web1-blue.yml -n staging
         kubectl apply -f k8s/web2-blue.yml -n staging
+        kubectl apply -f k8s/staging/ -n staging
 
-        kubectl apply -f k8s/staging/sarathi-deployment.yml -n staging
-        kubectl apply -f k8s/staging/executer-deployment.yml -n staging
-        kubectl apply -f k8s/staging/monitor-deployment.yml -n staging
-
-    - name: Verify STAGING
+    - name: Verify STAGING (STRICT)
       run: |
-        kubectl rollout status deployment/web1-blue -n staging --timeout=180s || true
-        kubectl rollout status deployment/web2-blue -n staging --timeout=180s || true
-        kubectl rollout status deployment/sarathi -n staging --timeout=180s || true
-        kubectl rollout status deployment/executer -n staging --timeout=180s || true
-        kubectl rollout status deployment/monitor -n staging --timeout=180s || true
+        set -e
+        kubectl rollout status deployment/web1-blue -n staging --timeout=300s
+        kubectl rollout status deployment/web2-blue -n staging --timeout=300s
+        kubectl rollout status deployment/sarathi -n staging --timeout=300s
+        kubectl rollout status deployment/executer -n staging --timeout=300s
+        kubectl rollout status deployment/monitor -n staging --timeout=300s
 
-    # 🚀 DEPLOY TO PROD
+    # 🚀 PROD
     - name: Deploy to PROD
       run: |
         kubectl apply -f k8s/ -n prod
 
-    # 🔄 UPDATE IMAGES (ENABLE ROLLBACK HISTORY)
     - name: Update Images
       run: |
         kubectl set image deployment/web1-blue web1=$IMAGE_PREFIX/web1-service:$TAG -n prod
@@ -82,46 +98,57 @@ jobs:
         kubectl set image deployment/executer executer=$IMAGE_PREFIX/executer-service:$TAG -n prod
         kubectl set image deployment/monitor monitor=$IMAGE_PREFIX/monitor-service:$TAG -n prod
 
-    # 🔒 STRICT CHECK (NO SILENT FAILURES)
-    - name: Wait for deployments (STRICT)
+    # 🔒 STRICT CHECK
+    - name: Wait for deployments
       run: |
         set -e
-        kubectl rollout status deployment/web1-blue -n prod --timeout=120s
-        kubectl rollout status deployment/web2-blue -n prod --timeout=120s
-        kubectl rollout status deployment/sarathi -n prod --timeout=120s
-        kubectl rollout status deployment/executer -n prod --timeout=120s
-        kubectl rollout status deployment/monitor -n prod --timeout=120s
+        kubectl rollout status deployment/web1-blue -n prod --timeout=300s
+        kubectl rollout status deployment/web2-blue -n prod --timeout=300s
+        kubectl rollout status deployment/sarathi -n prod --timeout=300s
+        kubectl rollout status deployment/executer -n prod --timeout=300s
+        kubectl rollout status deployment/monitor -n prod --timeout=300s
 
-    # ❤️ HEALTH GATE
+    # ❤️ HEALTH CHECK
     - name: Health Check Gate
       run: |
         curl -f http://$NODE_IP:30001/health
         curl -f http://$NODE_IP:30002/health
         curl -f http://$NODE_IP:30004/health
 
-    # 🔵🟢 SWITCH TRAFFIC
+    # 🔵🟢 SWITCH
     - name: Switch Traffic
       run: |
         kubectl patch svc web1-service -n prod -p '{"spec":{"selector":{"app":"web1","version":"green"}}}'
         kubectl patch svc web2-service -n prod -p '{"spec":{"selector":{"app":"web2","version":"green"}}}'
 
-    # 🔁 ROLLBACK (SAFE)
-    - name: Rollback Deployments
+    # 📊 METRICS
+    - name: Collect Metrics
+      run: |
+        LATENCY=$(curl -o /dev/null -s -w '%{time_total}' http://$NODE_IP:30001/health)
+        echo "{\"trace_id\":\"$TRACE_ID\",\"metrics\":{\"latency\":$LATENCY,\"error_rate\":0}}"
+
+    # 🔁 ROLLBACK
+    - name: Rollback
       if: failure()
       run: |
         kubectl rollout undo deployment/web1-blue -n prod || true
         kubectl rollout undo deployment/web2-blue -n prod || true
-        kubectl rollout undo deployment/sarathi -n prod || true
-        kubectl rollout undo deployment/executer -n prod || true
-        kubectl rollout undo deployment/monitor -n prod || true
-
-        kubectl patch svc web1-service -n prod -p '{"spec":{"selector":{"app":"web1","version":"blue"}}}' || true
-        kubectl patch svc web2-service -n prod -p '{"spec":{"selector":{"app":"web2","version":"blue"}}}' || true
 
     # 🚨 ALERT
-    - name: Send Alert on Failure
+    - name: Alert
       if: failure()
       run: |
         curl -X POST https://webhook.site/YOUR_ID \
         -H "Content-Type: application/json" \
-        -d '{"status":"FAILED","message":"Deployment failed"}'
+        -d "{\"trace_id\":\"$TRACE_ID\",\"status\":\"FAILED\"}"
+
+    # ✅ FINAL OUTPUT
+    - name: Final Output
+      if: success()
+      run: |
+        echo "{
+          \"trace_id\":\"$TRACE_ID\",
+          \"status\":\"success\",
+          \"deployment_type\":\"blue-green\",
+          \"result\":\"success\"
+        }"

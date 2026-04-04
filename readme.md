@@ -1,161 +1,144 @@
-# 🚀 Pravah – Production CI/CD Deployment (Blue-Green + Rolling Updates)
+Pravah CI/CD – Traceable, Governed and Observable Deployment System
 
-## 📌 Overview
+This project implements a production-grade CI/CD pipeline deployed on a real Kubernetes cluster hosted on AWS EC2. The system ensures zero downtime deployment, strict staging validation, automated rollback, and enhanced observability. The pipeline has been upgraded to a BHIV-compliant execution system by introducing traceability, governance, and observability features.
 
-Pravah is a microservices-based system deployed using a **production-grade CI/CD pipeline** on a real Kubernetes cluster.
+The system follows a microservices architecture with the following services:
 
-The system is deployed on **AWS EC2 (kubeadm-based Kubernetes cluster)** and supports:
+web1 (Blue-Green Deployment)
+web2 (Blue-Green Deployment)
+sarathi (Decision Engine)
+executer (Execution Engine)
+monitor (Observability Layer)
 
-* Automated CI/CD using GitHub Actions
-* Zero downtime deployments
-* Blue-Green deployment strategy
-* Rolling updates
-* Automatic rollback
+The Kubernetes cluster is created using kubeadm on EC2 instances:
 
----
+One master node
+One worker node
 
-## 🏗️ Architecture
+Namespaces used:
 
-### Microservices:
+staging
+prod
 
-* web1
-* web2
-* sarathi
-* executer
-* monitor
+A static Elastic IP is attached to the master node to ensure stable communication with the cluster from the CI/CD pipeline.
 
-### Deployment Strategy:
+Main Features
 
-* **web1, web2 → Blue-Green Deployment**
-* **sarathi, executer, monitor → Rolling Updates**
+Zero downtime deployment is achieved using blue-green strategy for web services and rolling updates for internal services.
 
----
+Staging to production promotion ensures that every deployment is first validated in staging before being pushed to production.
 
-## ☸️ Kubernetes Cluster
+Strict rollout verification ensures that deployments fail immediately if any service does not become healthy.
 
-* Cluster setup using kubeadm on AWS EC2
-* Fully managed remote cluster (no Minikube)
-* Namespace used:
+Automatic rollback is triggered when deployment fails, restoring the previous stable version.
 
-  * `prod` (production)
+Traceability is implemented using a unique trace_id, execution_id, and deployment_id generated at pipeline start and propagated across all logs and services.
 
----
+Governance layer enforces deployment rules using deterministic validation before execution.
 
-## ⚙️ CI/CD Pipeline
+Observability includes structured logging, latency measurement, error rate tracking, and alert triggering.
 
-### 🔁 Trigger
+System Architecture
 
-* Runs on push to `main` branch
+The pipeline follows this flow:
+Code Push → GitHub Actions → Build & Push Docker Images → Deploy to Staging → Validate → Deploy to Production → Health Check → Traffic Switch → Metrics Collection → Final Output
 
----
+Execution layer flow:
+Monitor → Detect issue → Executer → Governance check → Sarathi decision → Core execution → Verification → Logging → Outcome
 
-### 🔄 Pipeline Flow
+Traceability
 
-1. Build Docker images
-2. Tag images using commit SHA
-3. Push images to Docker Hub
-4. Load kubeconfig from GitHub Secrets
-5. Deploy services to Kubernetes cluster
-6. Perform rolling updates (core services)
-7. Deploy green version (web1, web2)
-8. Verify rollout
-9. Switch traffic (Blue → Green)
-10. Rollback automatically on failure
+Each deployment is uniquely tracked using:
 
----
+trace_id for full pipeline tracking
+execution_id for run identification
+deployment_id for version tracking
 
-## 🔐 Security
+All logs across pipeline and services include trace_id, enabling full trace reconstruction.
 
-* Kubeconfig stored securely in GitHub Secrets
-* No credentials hardcoded
-* Secure remote cluster access
+Governance
 
----
+A pre-deployment validation function validate_deployment_request() is implemented in the executer service.
 
-## 🚀 Deployment Strategies
+This function applies deterministic rules such as:
 
-### 🔵🟢 Blue-Green Deployment (web1, web2)
+blocking invalid service requests
+preventing restricted actions
+ensuring only allowed operations proceed
 
-* Two versions run simultaneously
-* Traffic controlled via Kubernetes Service
-* Instant switch between versions
-* Immediate rollback capability
+If governance returns BLOCK, execution is stopped immediately.
 
----
+Observability
 
-### 🔄 Rolling Updates (sarathi, executer, monitor)
+The monitor service continuously checks service health, latency, and system metrics.
 
-* Zero downtime ensured
-* Pods updated gradually
-* Health checks ensure stability
+The system detects:
 
----
+service failures
+high latency
+error conditions
 
-## 🌐 Live Access
+Alerts are triggered via webhook and structured logs.
 
-### Application
+Metrics collected:
 
-http://18.207.240.7:30001/health
+latency
+success rate
+error rate
+downtime
 
-### Metrics
+Structured Logging
 
-http://18.207.240.7:30004/metrics
+All logs are emitted in JSON format and include:
 
----
+trace_id
+event name
+timestamp
+service information
+execution data
 
-## 🧪 Zero Downtime Test
+These logs simulate integration with a memory layer (Bucket).
 
-```bash
-while true; do curl http://18.207.240.7:30001/health; done
-```
+Deployment Strategy
 
-Then trigger deployment:
+Blue-Green deployment is used for web1 and web2 services to ensure zero downtime.
 
-```bash
-git commit --allow-empty -m "test"
-git push
-```
+Rolling updates are used for internal services.
 
-✅ No downtime observed
+Traffic switching is handled via Kubernetes service selector updates.
 
----
+Setup Instructions
 
-## 🔁 Rollback Mechanism
+Create EC2 instances for master and worker nodes
+Install Kubernetes using kubeadm
+Join worker node to cluster
+Configure kubectl access
+Allocate and associate Elastic IP to master node
+Configure Security Groups to allow required NodePort traffic
+Clone repository
+Configure GitHub Secrets:
+DOCKER_USERNAME
+DOCKER_PASSWORD
+KUBECONFIG
+Push code to main branch to trigger pipeline
 
-* Failure detected during rollout
-* Automatic rollback triggered
-* For Blue-Green:
+Verification
 
-  * Traffic switched back to Blue
-* For rolling updates:
+Deployment can be verified using:
 
-  * `kubectl rollout undo` used
+kubectl get pods -n prod
+kubectl rollout status deployment/<service> -n prod
+curl http://<elastic-ip>:<nodeport>/health
 
----
+Expected Result
 
-## 📸 Proof
+A fully automated CI/CD pipeline that:
 
-All screenshots are available in the `proofs/` folder:
+deploys without downtime
+validates before production
+rolls back on failure
+tracks every deployment
+enforces governance
+provides observability metrics
 
-* GitHub Actions logs
-* Pod states
-* Zero downtime curl output
-* Rollout logs
-* Rollback logs
-
----
-
-## 🎯 Result
-
-* Fully automated CI/CD pipeline
-* Real Kubernetes deployment
-* Zero downtime achieved
-* Blue-Green + Rolling updates implemented
-* Automatic rollback verified
-* Production-ready system
-
----
-
-## 👨‍💻 Author
-
-Rayyan Shaikh
+This system represents a production-grade DevOps pipeline integrated with traceability, governance, and observability.

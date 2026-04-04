@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: sarathi
 spec:
-  replicas: 2
+  replicas: 1
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -27,8 +27,8 @@ spec:
 
         resources:
           requests:
-            memory: "100Mi"
-            cpu: "100m"
+            memory: "50Mi"
+            cpu: "50m"
           limits:
             memory: "200Mi"
             cpu: "200m"

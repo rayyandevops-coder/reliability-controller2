@@ -1,19 +1,17 @@
 """
-executer/app.py — SETU Execution Engine
-Full pipeline: proposal → Mitra scoring → Sarathi decision → Core execution
-→ Bucket logging → Outcome recording
+executer/app.py — SETU Execution Engine (BHIV UPGRADE)
 """
 
 from flask import Flask, request, jsonify
 import uuid
 import time
-import json
 
-from mitra           import calculate_score
+from governance import validate_deployment_request
+from mitra import calculate_score
 from sovereign_bridge import send_to_sarathi
-from core            import execute_action, verify_deployment
-from bucket          import log_event
-from outcome         import record_outcome
+from core import execute_action, verify_deployment
+from bucket import log_event
+from outcome import record_outcome
 
 app = Flask(__name__)
 
@@ -28,7 +26,7 @@ def execute():
     metrics    = data.get("metrics", {})
     trace_id   = str(uuid.uuid4())
 
-    # ── VALIDATION ────────────────────────────────────────────────────────────
+    # ── VALIDATION ─────────────────────────────────────────
     if not service_id:
         return jsonify({"error": "service_id required"}), 400
 
@@ -38,25 +36,42 @@ def execute():
     if action == "noop":
         return jsonify({"trace_id": trace_id, "status": "noop", "action": "noop"})
 
-    # ── STAGE 1: proposal created ─────────────────────────────────────────────
-    log_event(trace_id, "proposal_created", {
+    # 🔒 ── GOVERNANCE CHECK (NEW - CRITICAL) ─────────────────
+    governance_decision = validate_deployment_request(service_id, action)
+
+    log_event(trace_id, "governance_decision", {
         "service_id": service_id,
-        "action":     action,
-        "metrics":    metrics
+        "action": action,
+        "decision": governance_decision
     })
 
-    # ── STAGE 2: Mitra scoring ────────────────────────────────────────────────
+    if governance_decision == "BLOCK":
+        return jsonify({
+            "trace_id": trace_id,
+            "status": "blocked_by_governance",
+            "service_id": service_id,
+            "action": action
+        }), 403
+
+    # ── STAGE 1: proposal created ──────────────────────────
+    log_event(trace_id, "proposal_created", {
+        "service_id": service_id,
+        "action": action,
+        "metrics": metrics
+    })
+
+    # ── STAGE 2: Mitra scoring ─────────────────────────────
     score_data = calculate_score(metrics)
     data.update(score_data)
 
     log_event(trace_id, "proposal_scored", score_data)
 
-    # ── STAGE 3: Sarathi decision ─────────────────────────────────────────────
+    # ── STAGE 3: Sarathi decision ──────────────────────────
     sarathi_payload = {
-        "trace_id":   trace_id,
+        "trace_id": trace_id,
         "action_type": action,
         "service_id": service_id,
-        "source":     "SETU",
+        "source": "SETU",
         "payload": {
             **data,
             "decision_score": score_data["decision_score"]
@@ -64,38 +79,35 @@ def execute():
     }
 
     decision = send_to_sarathi(sarathi_payload)
-
     log_event(trace_id, "sarathi_decision", decision)
 
     sarathi_status = decision.get("status", "ERROR")
 
     if sarathi_status == "BLOCK":
         return jsonify({
-            "trace_id":        trace_id,
-            "status":          "blocked",
+            "trace_id": trace_id,
+            "status": "blocked",
             "sarathi_decision": sarathi_status,
-            "reason":          decision.get("reason", "policy blocked this action")
+            "reason": decision.get("reason", "policy blocked this action")
         })
 
     if sarathi_status == "ESCALATE":
         return jsonify({
-            "trace_id":        trace_id,
-            "status":          "escalated",
+            "trace_id": trace_id,
+            "status": "escalated",
             "sarathi_decision": sarathi_status,
-            "reason":          "requires manual approval"
+            "reason": "requires manual approval"
         })
 
     if sarathi_status == "ERROR":
-        # Sarathi unreachable — fail safe (do NOT execute)
         return jsonify({
             "trace_id": trace_id,
-            "status":   "sarathi_error",
-            "reason":   decision.get("reason", "unknown")
+            "status": "sarathi_error",
+            "reason": decision.get("reason", "unknown")
         }), 503
 
-    # sarathi_status == "ALLOW" — proceed to execution
-    # ── STAGE 4: Core execution ───────────────────────────────────────────────
-    start  = time.time()
+    # ── STAGE 4: Core execution ────────────────────────────
+    start = time.time()
     result = execute_action(service_id, action)
     latency = time.time() - start
 
@@ -104,15 +116,16 @@ def execute():
 
     log_event(trace_id, "execution_result", {
         "service_id": service_id,
-        "action":     action,
-        "result":     result,
-        "status":     status
+        "action": action,
+        "result": result,
+        "status": status,
+        "latency": latency
     })
 
-    # ── STAGE 5: Verification ─────────────────────────────────────────────────
+    # ── STAGE 5: Verification ─────────────────────────────
     verified = verify_deployment(service_id)
 
-    # ── STAGE 6: Outcome (feedback loop) ─────────────────────────────────────
+    # ── STAGE 6: Outcome ──────────────────────────────────
     outcome = record_outcome(
         trace_id=trace_id,
         success=success,
@@ -123,15 +136,20 @@ def execute():
 
     log_event(trace_id, "outcome", outcome)
 
+    # 🧾 FINAL STRUCTURED OUTPUT (NEW - REQUIRED)
     return jsonify({
-        "trace_id":        trace_id,
-        "status":          status,
-        "action":          action,
-        "result":          result,
-        "verified":        verified,
+        "trace_id": trace_id,
+        "status": status,
+        "deployment_type": "automated_action",
+        "result": result,
+        "verified": verified,
+        "metrics": {
+            "latency": latency,
+            "success": success
+        },
         "sarathi_decision": sarathi_status,
-        "decision_score":  score_data["decision_score"],
-        "priority":        score_data["priority"]
+        "decision_score": score_data["decision_score"],
+        "priority": score_data["priority"]
     })
 
 

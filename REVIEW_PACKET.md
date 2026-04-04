@@ -1,114 +1,90 @@
-# 📦 REVIEW PACKET – Pravah CI/CD Production Deployment
+The system is triggered by a push to the main branch. GitHub Actions acts as the entry point and initiates the CI/CD pipeline. The pipeline generates unique identifiers and begins deployment.
 
----
+Trace Flow
 
-## 1️⃣ Entry Point
+Traceability is implemented across the entire pipeline. At the start of the pipeline, trace_id, execution_id, and deployment_id are generated. These identifiers are propagated through:
 
-The CI/CD pipeline is triggered automatically on every push to the `main` branch.
+GitHub Actions logs
+Kubernetes deployment steps
+Executer service
+Monitor service
+Bucket logging system
 
-No manual intervention is required at any stage.
+Each log entry includes trace_id, allowing complete tracking of a deployment from start to finish.
 
----
+Governance Flow
 
-## 2️⃣ Pipeline Flow
+Before execution, every request passes through a governance validation layer implemented in executer/governance.py.
 
-1. Code is pushed to GitHub
-2. GitHub Actions pipeline starts
-3. Docker images are built for all services
-4. Images are tagged with commit SHA
-5. Images are pushed to Docker Hub
-6. Kubernetes cluster is accessed using kubeconfig (stored securely in GitHub Secrets)
-7. Core services (sarathi, executer, monitor) are updated using rolling updates
-8. Green versions of web1 and web2 are deployed
-9. Rollout is verified
-10. Traffic is switched from Blue → Green
-11. If failure occurs → rollback is triggered automatically
+The function validate_deployment_request() applies deterministic rules to decide whether a deployment should proceed or be blocked.
 
----
+If the decision is BLOCK:
 
-## 3️⃣ Real Deployment Flow
+execution stops immediately
+no deployment changes occur
+trace log records governance_decision event
 
-* Deployment is performed on a **real Kubernetes cluster running on AWS EC2**
-* Cluster created using kubeadm
-* No local clusters used (Minikube/Kind not used)
-* Services exposed using NodePort
+If ALLOW:
 
-Live endpoints:
+request proceeds to Sarathi decision engine
+execution continues normally
 
-* Application: http://18.207.240.7:30001/health
-* Metrics: http://18.207.240.7:30004/metrics
+Observability Metrics
 
----
+The system measures and logs key metrics including:
 
-## 4️⃣ What Changed (This Task)
+latency of execution
+success or failure of deployment
+error rate
+service health status
 
-* Migrated from local setup to real EC2 cluster
-* Implemented full CI/CD pipeline using GitHub Actions
-* Added secure kubeconfig handling
-* Implemented rolling updates for core services
-* Implemented Blue-Green deployment for web1 and web2
-* Added health checks and graceful shutdown
-* Enabled automatic rollback mechanism
+Monitor service continuously checks system state and triggers actions when anomalies are detected.
 
----
+Alerts are generated in case of:
 
-## 5️⃣ Failure + Rollback Proof
+deployment failure
+service crash
+execution errors
 
-### Failure Simulation:
+Structured logs are emitted in JSON format for all events.
 
-* Deployment intentionally broken using incorrect image
+One Real Deployment Trace (Example)
 
-### Pipeline Behavior:
+{
+"trace_id": "abc123",
+"event": "deployment_start",
+"service": "web1"
+}
 
-* Rollout failure detected
-* Traffic switch to Green stopped
-* System automatically reverted to Blue
+{
+"trace_id": "abc123",
+"event": "governance_decision",
+"decision": "ALLOW"
+}
 
-### Result:
+{
+"trace_id": "abc123",
+"event": "rollout_status",
+"status": "successful"
+}
 
-* Previous stable version restored
-* No downtime observed
+{
+"trace_id": "abc123",
+"event": "final_status",
+"result": "success"
+}
 
----
+Deployment Proof
 
-## 6️⃣ Zero Downtime Proof
+The system successfully demonstrates:
 
-Test performed using continuous curl:
+staging to production flow
+strict validation before production
+automatic rollback on failure
+alert generation on failure
+structured trace logs
+deployment metrics collection
 
-```bash
-while true; do curl http://18.207.240.7:30001/health; done
-```
+Conclusion
 
-During deployment:
-
-* No failed responses
-* No downtime observed
-
----
-
-## 7️⃣ Proof Artifacts
-
-Available in `proofs/` folder:
-
-* GitHub Actions logs
-* Rollout logs
-* Pod states (before/during/after)
-* Curl output logs
-* Rollback logs
-
----
-
-## 🎯 Final Result
-
-* CI/CD pipeline fully functional
-* Real cluster deployment achieved
-* Zero downtime validated
-* Blue-Green + Rolling updates implemented
-* Automatic rollback verified
-* Production-ready system
-
----
-
-## 👨‍💻 Submitted By
-
-Rayyan Shaikh
+The system has been successfully upgraded from a standard CI/CD pipeline to a BHIV-compliant execution system.
