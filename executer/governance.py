@@ -1,5 +1,5 @@
 def validate_deployment_request(service_id, action):
-    # deterministic rules
+
     if not service_id:
         return "BLOCK"
 

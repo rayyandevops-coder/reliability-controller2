@@ -1,144 +1,121 @@
+======================== README.md ========================
+
 Pravah CI/CD – Traceable, Governed and Observable Deployment System
 
-This project implements a production-grade CI/CD pipeline deployed on a real Kubernetes cluster hosted on AWS EC2. The system ensures zero downtime deployment, strict staging validation, automated rollback, and enhanced observability. The pipeline has been upgraded to a BHIV-compliant execution system by introducing traceability, governance, and observability features.
+This project implements a production-grade CI/CD pipeline deployed on Kubernetes using AWS EC2 instances. The system ensures safe, controlled, and observable deployments.
 
-The system follows a microservices architecture with the following services:
+Architecture Overview
 
-web1 (Blue-Green Deployment)
-web2 (Blue-Green Deployment)
-sarathi (Decision Engine)
-executer (Execution Engine)
-monitor (Observability Layer)
+The system is built using microservices deployed on a Kubernetes cluster with:
 
-The Kubernetes cluster is created using kubeadm on EC2 instances:
+one master node
+one worker node
+namespaces: staging and production
 
-One master node
-One worker node
+An Elastic IP is used to ensure consistent access to services.
 
-Namespaces used:
+Services included:
 
-staging
-prod
+web1 using blue-green deployment
+web2 using blue-green deployment
+sarathi for decision making
+executer for execution
+monitor for observability
 
-A static Elastic IP is attached to the master node to ensure stable communication with the cluster from the CI/CD pipeline.
+Pipeline Flow
 
-Main Features
+Code push triggers GitHub Actions pipeline.
 
-Zero downtime deployment is achieved using blue-green strategy for web services and rolling updates for internal services.
+Pipeline stages:
 
-Staging to production promotion ensures that every deployment is first validated in staging before being pushed to production.
-
-Strict rollout verification ensures that deployments fail immediately if any service does not become healthy.
-
-Automatic rollback is triggered when deployment fails, restoring the previous stable version.
-
-Traceability is implemented using a unique trace_id, execution_id, and deployment_id generated at pipeline start and propagated across all logs and services.
-
-Governance layer enforces deployment rules using deterministic validation before execution.
-
-Observability includes structured logging, latency measurement, error rate tracking, and alert triggering.
-
-System Architecture
-
-The pipeline follows this flow:
-Code Push → GitHub Actions → Build & Push Docker Images → Deploy to Staging → Validate → Deploy to Production → Health Check → Traffic Switch → Metrics Collection → Final Output
-
-Execution layer flow:
-Monitor → Detect issue → Executer → Governance check → Sarathi decision → Core execution → Verification → Logging → Outcome
+generate trace identifiers
+build and push Docker images
+deploy to staging
+validate staging rollout
+deploy to production
+verify deployments
+perform health checks
+switch traffic
+collect metrics
+output final deployment status
 
 Traceability
 
-Each deployment is uniquely tracked using:
+Each deployment is tracked using:
 
-trace_id for full pipeline tracking
-execution_id for run identification
-deployment_id for version tracking
+trace_id
+execution_id
+deployment_id
 
-All logs across pipeline and services include trace_id, enabling full trace reconstruction.
+These identifiers are included in all logs to ensure full traceability.
 
 Governance
 
-A pre-deployment validation function validate_deployment_request() is implemented in the executer service.
+A governance layer enforces deterministic rules after decision-making. It ensures that only valid deployment actions are executed.
 
-This function applies deterministic rules such as:
+If governance blocks a request:
 
-blocking invalid service requests
-preventing restricted actions
-ensuring only allowed operations proceed
-
-If governance returns BLOCK, execution is stopped immediately.
+deployment stops immediately
+no changes are applied
 
 Observability
 
-The monitor service continuously checks service health, latency, and system metrics.
+The system provides observability through:
 
-The system detects:
+structured logging
+latency tracking
+error rate monitoring
+health checks
+alert generation
 
-service failures
-high latency
-error conditions
+Monitor service detects issues and emits signals without triggering execution.
 
-Alerts are triggered via webhook and structured logs.
+Bucket Logging
 
-Metrics collected:
-
-latency
-success rate
-error rate
-downtime
-
-Structured Logging
-
-All logs are emitted in JSON format and include:
-
-trace_id
-event name
-timestamp
-service information
-execution data
-
-These logs simulate integration with a memory layer (Bucket).
+All logs are written to an append-only logging system. Logs are structured in JSON format and include trace information.
 
 Deployment Strategy
 
-Blue-Green deployment is used for web1 and web2 services to ensure zero downtime.
+Blue-green deployment is used for web services to ensure zero downtime. Rolling updates are used for internal services.
 
-Rolling updates are used for internal services.
+Rollback Mechanism
 
-Traffic switching is handled via Kubernetes service selector updates.
+If deployment fails:
+
+previous version is restored
+traffic is redirected back
+rollback event is logged
 
 Setup Instructions
 
-Create EC2 instances for master and worker nodes
+Create EC2 instances
 Install Kubernetes using kubeadm
 Join worker node to cluster
-Configure kubectl access
-Allocate and associate Elastic IP to master node
-Configure Security Groups to allow required NodePort traffic
-Clone repository
-Configure GitHub Secrets:
-DOCKER_USERNAME
-DOCKER_PASSWORD
-KUBECONFIG
-Push code to main branch to trigger pipeline
+Configure kubectl
+Allocate Elastic IP
+Configure security groups
+Set GitHub secrets
+Push code to main branch
 
 Verification
 
-Deployment can be verified using:
+Commands:
 
 kubectl get pods -n prod
-kubectl rollout status deployment/<service> -n prod
-curl http://<elastic-ip>:<nodeport>/health
+kubectl rollout status deployment/web1-blue -n prod
 
-Expected Result
+Test endpoints:
 
-A fully automated CI/CD pipeline that:
+curl http://<elastic-ip>:30001/health
 
-deploys without downtime
-validates before production
-rolls back on failure
-tracks every deployment
-enforces governance
-provides observability metrics
+Expected Output
 
-This system represents a production-grade DevOps pipeline integrated with traceability, governance, and observability.
+zero downtime deployment
+successful rollout
+structured logs
+metrics output
+traceable deployment
+
+Final Result
+
+The system evolves from a standard CI/CD pipeline into a governed and observable execution system aligned with BHIV architecture principles.

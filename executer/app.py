@@ -1,5 +1,6 @@
 """
-executer/app.py — SETU Execution Engine (BHIV UPGRADE)
+executer/app.py — BHIV CORRECT EXECUTION ENGINE
+Flow: Mitra → Sarathi → Governance → Execution → Logging
 """
 
 from flask import Flask, request, jsonify
@@ -26,7 +27,6 @@ def execute():
     metrics    = data.get("metrics", {})
     trace_id   = str(uuid.uuid4())
 
-    # ── VALIDATION ─────────────────────────────────────────
     if not service_id:
         return jsonify({"error": "service_id required"}), 400
 
@@ -34,39 +34,21 @@ def execute():
         return jsonify({"error": f"invalid action: {action}"}), 400
 
     if action == "noop":
-        return jsonify({"trace_id": trace_id, "status": "noop", "action": "noop"})
+        return jsonify({"trace_id": trace_id, "status": "noop"})
 
-    # 🔒 ── GOVERNANCE CHECK (NEW - CRITICAL) ─────────────────
-    governance_decision = validate_deployment_request(service_id, action)
-
-    log_event(trace_id, "governance_decision", {
-        "service_id": service_id,
-        "action": action,
-        "decision": governance_decision
-    })
-
-    if governance_decision == "BLOCK":
-        return jsonify({
-            "trace_id": trace_id,
-            "status": "blocked_by_governance",
-            "service_id": service_id,
-            "action": action
-        }), 403
-
-    # ── STAGE 1: proposal created ──────────────────────────
+    # STAGE 1 — Proposal
     log_event(trace_id, "proposal_created", {
         "service_id": service_id,
         "action": action,
         "metrics": metrics
     })
 
-    # ── STAGE 2: Mitra scoring ─────────────────────────────
+    # STAGE 2 — Mitra
     score_data = calculate_score(metrics)
     data.update(score_data)
-
     log_event(trace_id, "proposal_scored", score_data)
 
-    # ── STAGE 3: Sarathi decision ──────────────────────────
+    # STAGE 3 — Sarathi (DECISION FIRST)
     sarathi_payload = {
         "trace_id": trace_id,
         "action_type": action,
@@ -83,30 +65,23 @@ def execute():
 
     sarathi_status = decision.get("status", "ERROR")
 
-    if sarathi_status == "BLOCK":
+    if sarathi_status != "ALLOW":
         return jsonify({
             "trace_id": trace_id,
-            "status": "blocked",
-            "sarathi_decision": sarathi_status,
-            "reason": decision.get("reason", "policy blocked this action")
+            "status": sarathi_status.lower()
         })
 
-    if sarathi_status == "ESCALATE":
+    # STAGE 4 — GOVERNANCE (FINAL CONTROL)
+    governance_decision = validate_deployment_request(service_id, action)
+    log_event(trace_id, "governance_decision", {"decision": governance_decision})
+
+    if governance_decision == "BLOCK":
         return jsonify({
             "trace_id": trace_id,
-            "status": "escalated",
-            "sarathi_decision": sarathi_status,
-            "reason": "requires manual approval"
-        })
+            "status": "blocked_by_governance"
+        }), 403
 
-    if sarathi_status == "ERROR":
-        return jsonify({
-            "trace_id": trace_id,
-            "status": "sarathi_error",
-            "reason": decision.get("reason", "unknown")
-        }), 503
-
-    # ── STAGE 4: Core execution ────────────────────────────
+    # STAGE 5 — EXECUTION
     start = time.time()
     result = execute_action(service_id, action)
     latency = time.time() - start
@@ -122,10 +97,10 @@ def execute():
         "latency": latency
     })
 
-    # ── STAGE 5: Verification ─────────────────────────────
+    # STAGE 6 — VERIFY
     verified = verify_deployment(service_id)
 
-    # ── STAGE 6: Outcome ──────────────────────────────────
+    # STAGE 7 — OUTCOME
     outcome = record_outcome(
         trace_id=trace_id,
         success=success,
@@ -136,7 +111,6 @@ def execute():
 
     log_event(trace_id, "outcome", outcome)
 
-    # 🧾 FINAL STRUCTURED OUTPUT (NEW - REQUIRED)
     return jsonify({
         "trace_id": trace_id,
         "status": status,
@@ -146,10 +120,7 @@ def execute():
         "metrics": {
             "latency": latency,
             "success": success
-        },
-        "sarathi_decision": sarathi_status,
-        "decision_score": score_data["decision_score"],
-        "priority": score_data["priority"]
+        }
     })
 
 

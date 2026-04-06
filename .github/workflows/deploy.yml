@@ -108,6 +108,12 @@ jobs:
         kubectl rollout status deployment/executer -n prod --timeout=300s
         kubectl rollout status deployment/monitor -n prod --timeout=300s
 
+    # 📊 LOG ROLLOUT SUCCESS
+    - name: Log Rollout Status
+      if: success()
+      run: |
+        echo "{\"trace_id\":\"$TRACE_ID\",\"event\":\"rollout_status\",\"status\":\"success\"}"
+
     # ❤️ HEALTH CHECK
     - name: Health Check Gate
       run: |
@@ -127,12 +133,24 @@ jobs:
         LATENCY=$(curl -o /dev/null -s -w '%{time_total}' http://$NODE_IP:30001/health)
         echo "{\"trace_id\":\"$TRACE_ID\",\"metrics\":{\"latency\":$LATENCY,\"error_rate\":0}}"
 
-    # 🔁 ROLLBACK
+    # 🔁 FULL ROLLBACK
     - name: Rollback
       if: failure()
       run: |
         kubectl rollout undo deployment/web1-blue -n prod || true
         kubectl rollout undo deployment/web2-blue -n prod || true
+        kubectl rollout undo deployment/sarathi -n prod || true
+        kubectl rollout undo deployment/executer -n prod || true
+        kubectl rollout undo deployment/monitor -n prod || true
+
+        kubectl patch svc web1-service -n prod -p '{"spec":{"selector":{"app":"web1","version":"blue"}}}' || true
+        kubectl patch svc web2-service -n prod -p '{"spec":{"selector":{"app":"web2","version":"blue"}}}' || true
+
+    # 📊 LOG ROLLBACK
+    - name: Log Rollback Event
+      if: failure()
+      run: |
+        echo "{\"trace_id\":\"$TRACE_ID\",\"event\":\"rollback_event\",\"status\":\"triggered\"}"
 
     # 🚨 ALERT
     - name: Alert
@@ -144,11 +162,19 @@ jobs:
 
     # ✅ FINAL OUTPUT
     - name: Final Output
-      if: success()
+      if: always()
       run: |
+        if [ "${{ job.status }}" == "success" ]; then
+          STATUS="success"
+          RESULT="success"
+        else
+          STATUS="failed"
+          RESULT="rollback"
+        fi
+
         echo "{
           \"trace_id\":\"$TRACE_ID\",
-          \"status\":\"success\",
+          \"status\":\"$STATUS\",
           \"deployment_type\":\"blue-green\",
-          \"result\":\"success\"
+          \"result\":\"$RESULT\"
         }"

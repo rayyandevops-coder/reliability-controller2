@@ -1,3 +1,7 @@
+"""
+Append-only logging layer (no read, no influence)
+"""
+
 import json
 from datetime import datetime
 
