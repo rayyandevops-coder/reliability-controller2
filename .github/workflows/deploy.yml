@@ -62,7 +62,7 @@ jobs:
 
     - uses: azure/setup-kubectl@v4
 
-    # 🔧 FIXED KUBECONFIG (TLS ISSUE SOLVED)
+    # 🔧 KUBECONFIG FIX (TLS ISSUE SOLVED)
     - name: Configure kubeconfig
       run: |
         mkdir -p $HOME/.kube
@@ -117,16 +117,12 @@ jobs:
       run: |
         echo "{\"trace_id\":\"$TRACE_ID\",\"event\":\"rollout_status\",\"status\":\"success\"}"
 
-    # ❤️ FINAL FIX — INTERNAL HEALTH CHECK
+    # ❤️ FINAL HEALTH CHECK (NO NODEPORT, NO -i)
     - name: Health Check Gate
       run: |
-        kubectl run curl-test --rm -i --restart=Never \
+        kubectl run curl-test --rm --restart=Never \
           --image=curlimages/curl -- \
-          curl -f http://web1-service:5001/health
-
-        kubectl run curl-test2 --rm -i --restart=Never \
-          --image=curlimages/curl -- \
-          curl -f http://web2-service:5002/health
+          sh -c "curl -f http://web1-service:5001/health && curl -f http://web2-service:5002/health"
 
     # 🔵🟢 SWITCH
     - name: Switch Traffic
@@ -137,7 +133,7 @@ jobs:
     # 📊 METRICS (INTERNAL)
     - name: Collect Metrics
       run: |
-        LATENCY=$(kubectl run tmp --rm -i --restart=Never \
+        LATENCY=$(kubectl run tmp --rm --restart=Never \
           --image=curlimages/curl -- \
           curl -o /dev/null -s -w '%{time_total}' http://web1-service:5001/health)
 
