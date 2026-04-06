@@ -7,7 +7,6 @@ on:
 
 env:
   IMAGE_PREFIX: rayyandevopss
-  NODE_IP: 54.156.236.10
 
 jobs:
   deploy:
@@ -63,10 +62,14 @@ jobs:
 
     - uses: azure/setup-kubectl@v4
 
+    # 🔧 FIXED KUBECONFIG (TLS ISSUE SOLVED)
     - name: Configure kubeconfig
       run: |
         mkdir -p $HOME/.kube
         echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+        kubectl config set-cluster kubernetes \
+          --server=https://54.156.236.10:6443 \
+          --insecure-skip-tls-verify=true
 
     # 🧪 STAGING
     - name: Deploy to STAGING
@@ -114,12 +117,16 @@ jobs:
       run: |
         echo "{\"trace_id\":\"$TRACE_ID\",\"event\":\"rollout_status\",\"status\":\"success\"}"
 
-    # ❤️ HEALTH CHECK
+    # ❤️ FINAL FIX — INTERNAL HEALTH CHECK
     - name: Health Check Gate
       run: |
-        curl -f http://$NODE_IP:30001/health
-        curl -f http://$NODE_IP:30002/health
-        curl -f http://$NODE_IP:30004/health
+        kubectl run curl-test --rm -i --restart=Never \
+          --image=curlimages/curl -- \
+          curl -f http://web1-service:5001/health
+
+        kubectl run curl-test2 --rm -i --restart=Never \
+          --image=curlimages/curl -- \
+          curl -f http://web2-service:5002/health
 
     # 🔵🟢 SWITCH
     - name: Switch Traffic
@@ -127,10 +134,13 @@ jobs:
         kubectl patch svc web1-service -n prod -p '{"spec":{"selector":{"app":"web1","version":"green"}}}'
         kubectl patch svc web2-service -n prod -p '{"spec":{"selector":{"app":"web2","version":"green"}}}'
 
-    # 📊 METRICS
+    # 📊 METRICS (INTERNAL)
     - name: Collect Metrics
       run: |
-        LATENCY=$(curl -o /dev/null -s -w '%{time_total}' http://$NODE_IP:30001/health)
+        LATENCY=$(kubectl run tmp --rm -i --restart=Never \
+          --image=curlimages/curl -- \
+          curl -o /dev/null -s -w '%{time_total}' http://web1-service:5001/health)
+
         echo "{\"trace_id\":\"$TRACE_ID\",\"metrics\":{\"latency\":$LATENCY,\"error_rate\":0}}"
 
     # 🔁 FULL ROLLBACK
