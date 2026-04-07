@@ -1,83 +1,20 @@
-# 🚀 Pravah — BHIV Compliant Execution System
+
+---
+
+# 📄 2. `README.md`
+
+```markdown
+# Reliability Controller (BHIV Architecture)
 
 ## 📌 Overview
 
-Pravah is a production-grade, BHIV-compliant CI/CD system with strict architectural separation between decision, governance, execution, and monitoring layers.
+This project implements a distributed reliability control system using a clean BHIV architecture:
 
-This project demonstrates a **traceable, governed, and observable deployment system**.
-
----
-
-## 🧠 Architecture
-
-Final Flow:
-
-CI/CD Pipeline  
-→ Sarathi (Decision Engine)  
-→ Governance (Validation Layer)  
-→ Executer (Execution Engine)  
-→ Bucket (Logging Layer)  
-→ Monitor (Signal Layer)
-
----
-
-## 🔹 Components
-
-### 1. Sarathi (Decision Layer)
-- Evaluates deployment requests
-- Returns: ALLOW / BLOCK / ESCALATE
-
----
-
-### 2. Governance Layer
-- Validates deployment requests
-- Enforces rules
-- Returns: ALLOW / BLOCK
-- No routing, no execution
-
----
-
-### 3. Executer (Execution Layer)
-- Executes actions ONLY if allowed
-- Supports:
-  - restart
-  - scale_up
-  - scale_down
-- Performs:
-  - execution
-  - verification
-  - outcome logging
-
----
-
-### 4. Bucket (Logging Layer)
-- Append-only logging system
-- No read / no overwrite
-- Stores:
-  - trace logs
-  - execution logs
-  - final status
-
----
-
-### 5. Monitor (Signal Layer)
-- Detects anomalies
-- Emits signals ONLY
-- Does NOT trigger execution
-
----
-
-## 🔍 Features
-
-- ✅ Blue-Green Deployment
-- ✅ Full Traceability (trace_id, execution_id)
-- ✅ Governance Enforcement
-- ✅ Decision Engine (Sarathi)
-- ✅ Observability (latency, success, failure)
-- ✅ Automatic Rollback
-- ✅ Structured Logging (JSON)
-- ✅ Health Checks
-- ✅ Kubernetes-based deployment
+- Sarathi → Decision Engine
+- Governance → Validation Layer
+- Executer → Execution Layer
+- Monitor → Observability (Signal Only)
+- Bucket → Append-only Logging
 
 ---
 
@@ -86,61 +23,92 @@ CI/CD Pipeline
 - Python (Flask)
 - Docker
 - Kubernetes
-- GitHub Actions
-- REST APIs
+- GitHub Actions (CI/CD)
+- AWS EC2
 
 ---
 
-## 🚀 How It Works
+## 🚀 Architecture Flow
 
-1. Code pushed to main branch
-2. GitHub Actions pipeline starts
-3. Sarathi evaluates deployment
-4. Governance validates request
-5. Executer performs deployment
-6. Logs stored in bucket
-7. Monitor observes system
-
----
-
-## 📊 Example Execution Trace
-{
-"trace_id": "abc123",
-"stage": "decision"
-}
-{
-"trace_id": "abc123",
-"stage": "governance",
-"decision": "ALLOW"
-}
-{
-"trace_id": "abc123",
-"stage": "execution"
-}
-{
-"trace_id": "abc123",
-"stage": "final_status"
-}
+GitHub Actions  
+→ Sarathi (Decision)  
+→ Governance (Validation)  
+→ Executer (Execution)  
+→ Bucket (Logging)  
+→ Monitor (Signals)
 
 ---
 
-## 🎯 BHIV Compliance
+## 🧠 Components
 
-✔ Separation of Concerns  
-✔ Control Plane vs Execution Plane  
-✔ No cross-layer violations  
-✔ Strict boundary enforcement  
+### 🔹 Sarathi
+- Policy Decision Point
+- Returns: ALLOW / BLOCK / ESCALATE
+
+### 🔹 Governance
+- Validates request
+- No decision-making
+
+### 🔹 Executer
+- Executes actions (scale, restart)
+- Verifies deployment
+
+### 🔹 Monitor
+- Detects anomalies
+- Emits signals only
+
+### 🔹 Bucket
+- Append-only logging
+- No read/write interference
 
 ---
 
-## 👨‍💻 Author
+## 🌐 External Access
 
-Rayyan Shaikh  
-B.Tech IT — Cloud & DevOps
+| Service | URL |
+|--------|-----|
+| Web1 | http://<public-ip>:30001/health |
+| Web2 | http://<public-ip>:30002/health |
+| Monitor | http://<public-ip>:30004/metrics |
 
 ---
 
-## 🏁 Status
+## ⚙️ Deployment
 
-✅ Final Boundary Alignment Complete  
-✅ Ready for Production / Evaluation  
+### Push to deploy:
+
+```bash
+git push origin main
+
+CI/CD pipeline will:
+
+Build Docker images
+Push to Docker Hub
+Deploy to Kubernetes
+Trigger decision & execution flow
+✅ Features
+Blue-Green Deployment
+Traceable Execution
+Policy-driven Decisions
+Clean Layer Separation
+External Access via NodePort
+📊 Metrics
+
+Monitor endpoint:
+
+/metrics
+🏁 Status
+
+✔ Fully functional
+✔ BHIV compliant
+✔ Production-ready
+
+
+---
+
+# ✉️ 3. SUBMISSION MESSAGE (VERY SHORT)
+
+Use this:
+
+
+BHIV architecture aligned with strict layer separation. CI/CD, governance flow, execution pipeline, and external access fully implemented and verified.
