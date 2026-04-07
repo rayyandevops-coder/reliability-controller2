@@ -1,4 +1,4 @@
-name: CI-CD Pipeline (BHIV FINAL CORRECT)
+name: CI-CD Pipeline (BHIV FINAL - FIXED)
 
 on:
   push:
@@ -14,40 +14,41 @@ jobs:
 
     steps:
 
+    # 🔹 Checkout
     - uses: actions/checkout@v4
 
-    # 🔹 TRACE GENERATION
+    # 🔹 Trace IDs
     - name: Generate Trace IDs
       run: |
         echo "TRACE_ID=$(uuidgen)" >> $GITHUB_ENV
         echo "EXECUTION_ID=$(date +%s)" >> $GITHUB_ENV
         echo "DEPLOYMENT_ID=${GITHUB_SHA}" >> $GITHUB_ENV
 
-    # 🔹 GOVERNANCE CHECK (BRANCH LEVEL)
-    - name: Governance Gate (Branch)
+    # 🔹 Governance Gate (branch)
+    - name: Governance Gate
       run: |
         if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
           echo "BLOCKED: Only main branch allowed"
           exit 1
         fi
 
-    # 🔹 LOG START
-    - name: Log Deployment Start
+    # 🔹 Log start
+    - name: Log Start
       run: |
         echo "{\"trace_id\":\"$TRACE_ID\",\"event\":\"deployment_start\"}"
 
-    # 🔹 DOCKER LOGIN
+    # 🔹 Docker login
     - uses: docker/login-action@v3
       with:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
 
-    # 🔹 SET TAG
-    - name: Set Image Tag
+    # 🔹 Tag
+    - name: Set Tag
       run: echo "TAG=${GITHUB_SHA}" >> $GITHUB_ENV
 
-    # 🔹 BUILD & PUSH IMAGES
-    - name: Build & Push
+    # 🔹 Build & Push
+    - name: Build & Push Images
       run: |
         docker build -t $IMAGE_PREFIX/web1-service:$TAG ./web1
         docker build -t $IMAGE_PREFIX/web2-service:$TAG ./web2
@@ -61,10 +62,10 @@ jobs:
         docker push $IMAGE_PREFIX/executer-service:$TAG
         docker push $IMAGE_PREFIX/monitor-service:$TAG
 
-    # 🔹 KUBECTL SETUP
+    # 🔹 Kubectl setup
     - uses: azure/setup-kubectl@v4
 
-    # 🔹 CONFIGURE KUBECONFIG
+    # 🔹 Kubeconfig
     - name: Configure kubeconfig
       run: |
         mkdir -p $HOME/.kube
@@ -73,26 +74,6 @@ jobs:
         kubectl config set-cluster kubernetes \
           --server=https://54.156.236.10:6443 \
           --insecure-skip-tls-verify=true
-
-    # 🔹 SARATHI DECISION (MANDATORY)
-    - name: Sarathi Decision Gate
-      run: |
-        RESPONSE=$(curl -s -X POST http://sarathi-service:5001/decision \
-          -H "Content-Type: application/json" \
-          -d "{
-            \"trace_id\":\"$TRACE_ID\",
-            \"action_type\":\"deployment\",
-            \"payload\":{\"decision_score\":0.8}
-          }")
-
-        echo "$RESPONSE"
-
-        STATUS=$(echo $RESPONSE | jq -r '.status')
-
-        if [ "$STATUS" != "ALLOW" ]; then
-          echo "❌ BLOCKED BY SARATHI"
-          exit 1
-        fi
 
     # 🔹 STAGING DEPLOY
     - name: Deploy to STAGING
@@ -105,7 +86,7 @@ jobs:
         kubectl apply -f k8s/executer.yml -n staging
         kubectl apply -f k8s/monitor.yml -n staging
 
-    # 🔹 VERIFY STAGING
+    # 🔹 WAIT STAGING
     - name: Verify STAGING
       run: |
         set -e
@@ -115,9 +96,36 @@ jobs:
         kubectl rollout status deployment/executer -n staging --timeout=300s
         kubectl rollout status deployment/monitor -n staging --timeout=300s
 
+    # 🔥 SARATHI DECISION (INSIDE CLUSTER)
+    - name: Sarathi Decision Gate
+      run: |
+        kubectl run sarathi-check --restart=Never \
+          --image=curlimages/curl -- \
+          sh -c 'curl -s -X POST http://sarathi-service:5001/decision \
+          -H "Content-Type: application/json" \
+          -d "{\"trace_id\":\"'$TRACE_ID'\",\"action_type\":\"deployment\",\"payload\":{\"decision_score\":0.8}}"' > /dev/null
+
+        kubectl wait --for=condition=Ready pod/sarathi-check --timeout=30s || true
+
+        kubectl logs sarathi-check > result.json || true
+
+        echo "Sarathi Response:"
+        cat result.json
+
+        STATUS=$(cat result.json | jq -r '.status')
+
+        if [ "$STATUS" != "ALLOW" ]; then
+          echo "❌ BLOCKED BY SARATHI"
+          kubectl delete pod sarathi-check || true
+          exit 1
+        fi
+
+        kubectl delete pod sarathi-check || true
+
     # 🔹 PROD DEPLOY
     - name: Deploy to PROD
       run: |
+        kubectl create namespace prod || true
         kubectl apply -f k8s/ -n prod
 
     # 🔹 UPDATE IMAGES
@@ -129,8 +137,8 @@ jobs:
         kubectl set image deployment/executer executer=$IMAGE_PREFIX/executer-service:$TAG -n prod
         kubectl set image deployment/monitor monitor=$IMAGE_PREFIX/monitor-service:$TAG -n prod
 
-    # 🔹 WAIT FOR DEPLOYMENTS
-    - name: Wait for deployments
+    # 🔹 WAIT PROD
+    - name: Wait for PROD Deployments
       run: |
         set -e
         kubectl rollout status deployment/web1-blue -n prod --timeout=300s
@@ -139,17 +147,21 @@ jobs:
         kubectl rollout status deployment/executer -n prod --timeout=300s
         kubectl rollout status deployment/monitor -n prod --timeout=300s
 
-    # 🔹 EXECUTION TRIGGER (FINAL FLOW)
+    # 🔥 EXECUTER CALL (INSIDE CLUSTER)
     - name: Notify Executer
       run: |
-        curl -X POST http://executer-service:5003/execute-action \
-        -H "Content-Type: application/json" \
-        -d "{
-          \"trace_id\":\"$TRACE_ID\",
-          \"service_id\":\"web1\",
-          \"action\":\"scale_up\",
-          \"decision\":\"ALLOW\"
-        }"
+        kubectl run exec-call --restart=Never \
+          --image=curlimages/curl -- \
+          sh -c 'curl -s -X POST http://executer-service:5003/execute-action \
+          -H "Content-Type: application/json" \
+          -d "{\"trace_id\":\"'$TRACE_ID'\",\"service_id\":\"web1\",\"action\":\"scale_up\",\"decision\":\"ALLOW\"}"'
+
+        kubectl wait --for=condition=Ready pod/exec-call --timeout=30s || true
+
+        echo "Executer Response:"
+        kubectl logs exec-call || true
+
+        kubectl delete pod exec-call || true
 
     # 🔹 HEALTH CHECK
     - name: Health Check
@@ -162,7 +174,7 @@ jobs:
         kubectl logs curl-test || true
         kubectl delete pod curl-test || true
 
-    # 🔹 SWITCH TRAFFIC (BLUE → GREEN)
+    # 🔹 SWITCH TRAFFIC
     - name: Switch Traffic
       run: |
         kubectl patch svc web1-service -n prod -p '{"spec":{"selector":{"app":"web1","version":"green"}}}'
@@ -175,11 +187,11 @@ jobs:
           --image=curlimages/curl -- \
           curl -o /dev/null -s -w '%{time_total}' http://web1-service:5001/health)
 
-        echo "{\"trace_id\":\"$TRACE_ID\",\"metrics\":{\"latency\":$LATENCY}}"
+        echo "{\"trace_id\":\"$TRACE_ID\",\"latency\":$LATENCY}"
 
         kubectl delete pod tmp || true
 
-    # 🔹 SUCCESS LOG
+    # 🔹 SUCCESS
     - name: Success Log
       if: success()
       run: |
