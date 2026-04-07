@@ -1,4 +1,4 @@
-name: CI-CD Pipeline (BHIV FINAL - NO ERRORS)
+name: CI-CD Pipeline (BHIV FINAL - STABLE)
 
 on:
   push:
@@ -96,31 +96,24 @@ jobs:
         kubectl rollout status deployment/executer -n staging --timeout=300s
         kubectl rollout status deployment/monitor -n staging --timeout=300s
 
-    # 🔥 SARATHI DECISION (NO LOG ISSUE)
+    # 🔥 SARATHI DECISION (PORT FORWARD FIX)
     - name: Sarathi Decision Gate
       run: |
-        kubectl run sarathi-check --restart=Never \
-          --image=curlimages/curl \
-          --command -- sh -c "curl -s -X POST http://sarathi-service:5001/decision \
-          -H 'Content-Type: application/json' \
-          -d '{\"trace_id\":\"$TRACE_ID\",\"action_type\":\"deployment\",\"payload\":{\"decision_score\":0.8}}' > /tmp/result.json && cat /tmp/result.json"
-
+        kubectl port-forward svc/sarathi-service 5001:5001 &
         sleep 5
 
-        echo "Sarathi Response:"
-        kubectl exec sarathi-check -- cat /tmp/result.json || echo "{}"
+        RESPONSE=$(curl -s -X POST http://localhost:5001/decision \
+          -H "Content-Type: application/json" \
+          -d "{\"trace_id\":\"$TRACE_ID\",\"action_type\":\"deployment\",\"payload\":{\"decision_score\":0.8}}")
 
-        STATUS=$(kubectl exec sarathi-check -- sh -c "cat /tmp/result.json | grep -o '\"status\":\"[A-Z]*\"' | cut -d':' -f2 | tr -d '\"'")
+        echo "Sarathi Response: $RESPONSE"
 
-        echo "Parsed STATUS: $STATUS"
+        STATUS=$(echo $RESPONSE | jq -r '.status')
 
         if [ "$STATUS" != "ALLOW" ]; then
           echo "❌ BLOCKED BY SARATHI"
-          kubectl delete pod sarathi-check || true
           exit 1
         fi
-
-        kubectl delete pod sarathi-check || true
 
     # 🔹 Deploy PROD
     - name: Deploy to PROD
@@ -147,21 +140,15 @@ jobs:
         kubectl rollout status deployment/executer -n prod --timeout=300s
         kubectl rollout status deployment/monitor -n prod --timeout=300s
 
-    # 🔥 EXECUTER CALL
+    # 🔥 EXECUTER CALL (PORT FORWARD)
     - name: Notify Executer
       run: |
-        kubectl run exec-call --restart=Never \
-          --image=curlimages/curl \
-          --command -- sh -c "curl -s -X POST http://executer-service:5003/execute-action \
-          -H 'Content-Type: application/json' \
-          -d '{\"trace_id\":\"$TRACE_ID\",\"service_id\":\"web1\",\"action\":\"scale_up\",\"decision\":\"ALLOW\"}'"
-
+        kubectl port-forward svc/executer-service 5003:5003 &
         sleep 5
 
-        echo "Executer Response:"
-        kubectl logs exec-call || true
-
-        kubectl delete pod exec-call || true
+        curl -X POST http://localhost:5003/execute-action \
+          -H "Content-Type: application/json" \
+          -d "{\"trace_id\":\"$TRACE_ID\",\"service_id\":\"web1\",\"action\":\"scale_up\",\"decision\":\"ALLOW\"}"
 
     # 🔹 Health Check
     - name: Health Check
@@ -179,44 +166,8 @@ jobs:
         kubectl patch svc web1-service -n prod -p '{"spec":{"selector":{"app":"web1","version":"green"}}}'
         kubectl patch svc web2-service -n prod -p '{"spec":{"selector":{"app":"web2","version":"green"}}}'
 
-    # 🔹 Metrics
-    - name: Collect Metrics
-      run: |
-        LATENCY=$(kubectl run tmp --restart=Never \
-          --image=curlimages/curl -- \
-          curl -o /dev/null -s -w '%{time_total}' http://web1-service:5001/health)
-
-        echo "{\"trace_id\":\"$TRACE_ID\",\"latency\":$LATENCY}"
-
-        kubectl delete pod tmp || true
-
     # 🔹 Success
     - name: Success Log
       if: success()
       run: |
         echo "{\"trace_id\":\"$TRACE_ID\",\"status\":\"success\"}"
-
-    # 🔹 Rollback
-    - name: Rollback
-      if: failure()
-      run: |
-        kubectl rollout undo deployment/web1-blue -n prod || true
-        kubectl rollout undo deployment/web2-blue -n prod || true
-
-        kubectl patch svc web1-service -n prod -p '{"spec":{"selector":{"app":"web1","version":"blue"}}}' || true
-        kubectl patch svc web2-service -n prod -p '{"spec":{"selector":{"app":"web2","version":"blue"}}}' || true
-
-    # 🔹 Failure Log
-    - name: Failure Log
-      if: failure()
-      run: |
-        echo "{\"trace_id\":\"$TRACE_ID\",\"status\":\"rollback\"}"
-
-    # 🔹 Final Output
-    - name: Final Output
-      if: always()
-      run: |
-        echo "{
-          \"trace_id\":\"$TRACE_ID\",
-          \"deployment_type\":\"blue-green\"
-        }"
