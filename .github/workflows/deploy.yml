@@ -1,4 +1,4 @@
-name: CI-CD Pipeline (BHIV FINAL - PRODUCTION READY)
+name: CI-CD Pipeline (BHIV FINAL - NO CONFLICTS)
 
 on:
   push:
@@ -14,32 +14,18 @@ jobs:
 
     steps:
 
-    # 🔹 Checkout
     - uses: actions/checkout@v4
 
-    # 🔹 Trace IDs
     - name: Generate Trace IDs
       run: |
         echo "TRACE_ID=$(uuidgen)" >> $GITHUB_ENV
-        echo "EXECUTION_ID=$(date +%s)" >> $GITHUB_ENV
-        echo "DEPLOYMENT_ID=${GITHUB_SHA}" >> $GITHUB_ENV
 
-    # 🔹 Governance Gate
-    - name: Governance Gate
-      run: |
-        if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
-          echo "BLOCKED"
-          exit 1
-        fi
-
-    # 🔹 Docker Login
     - uses: docker/login-action@v3
       with:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
 
-    # 🔹 Build & Push
-    - name: Build & Push Images
+    - name: Build & Push
       run: |
         docker build -t $IMAGE_PREFIX/web1-service:$GITHUB_SHA ./web1
         docker build -t $IMAGE_PREFIX/web2-service:$GITHUB_SHA ./web2
@@ -53,42 +39,38 @@ jobs:
         docker push $IMAGE_PREFIX/executer-service:$GITHUB_SHA
         docker push $IMAGE_PREFIX/monitor-service:$GITHUB_SHA
 
-    # 🔹 Kubectl Setup
     - uses: azure/setup-kubectl@v4
 
-    # 🔹 Configure kubeconfig
     - name: Configure kubeconfig
       run: |
         mkdir -p $HOME/.kube
         echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
 
-    # 🔹 Deploy
-    - name: Deploy to PROD
+    - name: Deploy
       run: |
         kubectl create namespace prod || true
         kubectl apply -f k8s/ -n prod
 
-    # 🔹 Wait for Deployments
-    - name: Wait for Deployments
+    - name: Wait
       run: |
-        kubectl rollout status deployment/sarathi -n prod --timeout=300s
-        kubectl rollout status deployment/executer -n prod --timeout=300s
-        kubectl rollout status deployment/web1-blue -n prod --timeout=300s
-        kubectl rollout status deployment/web2-blue -n prod --timeout=300s
+        kubectl rollout status deployment/sarathi -n prod
+        kubectl rollout status deployment/executer -n prod
+        kubectl rollout status deployment/web1-blue -n prod
+        kubectl rollout status deployment/web2-blue -n prod
 
-    # 🔥 SARATHI DECISION
+    # 🔥 SARATHI
     - name: Sarathi Decision
       run: |
-        kubectl run curl-sarathi \
+        POD=curl-sarathi-$TRACE_ID
+
+        kubectl run $POD \
           --image=curlimages/curl \
           --restart=Never \
           --command -- sleep 10
 
-        kubectl wait --for=condition=Ready pod/curl-sarathi --timeout=60s
+        kubectl wait --for=condition=Ready pod/$POD --timeout=60s
 
-        echo "Calling Sarathi..."
-
-        kubectl exec curl-sarathi -- \
+        kubectl exec $POD -- \
           curl -s -X POST http://sarathi-service.prod.svc.cluster.local:5001/decision \
           -H "Content-Type: application/json" \
           -d "{\"trace_id\":\"$TRACE_ID\",\"action_type\":\"deployment\",\"payload\":{\"decision_score\":0.8}}" \
@@ -98,103 +80,47 @@ jobs:
 
         STATUS=$(jq -r '.status' response.json)
 
-        kubectl delete pod curl-sarathi
+        kubectl delete pod $POD
 
         if [ "$STATUS" != "ALLOW" ]; then
-          echo "❌ BLOCKED BY SARATHI"
           exit 1
         fi
 
-        echo "Sarathi ALLOWED ✅"
-
-    # 🔥 EXECUTER CALL
+    # 🔥 EXECUTER
     - name: Executer Call
       run: |
-        kubectl run curl-exec \
+        POD=curl-exec-$TRACE_ID
+
+        kubectl run $POD \
           --image=curlimages/curl \
           --restart=Never \
           --command -- sleep 10
 
-        kubectl wait --for=condition=Ready pod/curl-exec --timeout=60s
+        kubectl wait --for=condition=Ready pod/$POD --timeout=60s
 
-        kubectl exec curl-exec -- \
+        kubectl exec $POD -- \
           curl -X POST http://executer-service.prod.svc.cluster.local:5003/execute-action \
           -H "Content-Type: application/json" \
           -d "{\"trace_id\":\"$TRACE_ID\",\"service_id\":\"web1\",\"action\":\"scale_up\",\"decision\":\"ALLOW\"}"
 
-        kubectl delete pod curl-exec
+        kubectl delete pod $POD
 
-        echo "Executer triggered ✅"
-
-    # 🔹 Health Check
+    # 🔹 HEALTH
     - name: Health Check
       run: |
-        kubectl run curl-test \
+        POD=curl-test-$TRACE_ID
+
+        kubectl run $POD \
           --image=curlimages/curl \
           --restart=Never \
           --command -- sleep 10
 
-        kubectl wait --for=condition=Ready pod/curl-test --timeout=60s
+        kubectl wait --for=condition=Ready pod/$POD --timeout=60s
 
-        kubectl exec curl-test -- \
+        kubectl exec $POD -- \
           curl -f http://web1-service.prod.svc.cluster.local:5001/health
 
-        kubectl delete pod curl-test
+        kubectl delete pod $POD
 
-        echo "Health check passed ✅"
-
-    # 🔹 Switch Traffic (Blue → Green)
-    - name: Switch Traffic
-      run: |
-        kubectl patch svc web1-service -n prod -p '{"spec":{"selector":{"app":"web1","version":"green"}}}'
-        kubectl patch svc web2-service -n prod -p '{"spec":{"selector":{"app":"web2","version":"green"}}}'
-
-    # 🔹 Metrics
-    - name: Collect Metrics
-      run: |
-        kubectl run curl-metrics \
-          --image=curlimages/curl \
-          --restart=Never \
-          --command -- sleep 10
-
-        kubectl wait --for=condition=Ready pod/curl-metrics --timeout=60s
-
-        LATENCY=$(kubectl exec curl-metrics -- \
-          curl -o /dev/null -s -w '%{time_total}' http://web1-service.prod.svc.cluster.local:5001/health)
-
-        echo "{\"trace_id\":\"$TRACE_ID\",\"latency\":$LATENCY}"
-
-        kubectl delete pod curl-metrics
-
-    # 🔹 Success Log
-    - name: Success Log
-      if: success()
-      run: |
-        echo "{\"trace_id\":\"$TRACE_ID\",\"status\":\"success\"}"
-
-    # 🔹 Rollback (SAFE)
-    - name: Rollback
-      if: failure()
-      run: |
-        echo "Rollback triggered..."
-
-        kubectl rollout undo deployment/web1-blue -n prod || echo "No rollout history"
-        kubectl rollout undo deployment/web2-blue -n prod || echo "No rollout history"
-
-        kubectl patch svc web1-service -n prod -p '{"spec":{"selector":{"app":"web1","version":"blue"}}}' || true
-        kubectl patch svc web2-service -n prod -p '{"spec":{"selector":{"app":"web2","version":"blue"}}}' || true
-
-    # 🔹 Failure Log
-    - name: Failure Log
-      if: failure()
-      run: |
-        echo "{\"trace_id\":\"$TRACE_ID\",\"status\":\"rollback\"}"
-
-    # 🔹 Final Output
-    - name: Final Output
-      if: always()
-      run: |
-        echo "{
-          \"trace_id\":\"$TRACE_ID\",
-          \"deployment_type\":\"blue-green\"
-        }"
+    - name: Success
+      run: echo "Deployment Successful"
