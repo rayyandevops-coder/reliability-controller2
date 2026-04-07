@@ -1,4 +1,4 @@
-name: CI-CD Pipeline (BHIV FINAL - FIXED)
+name: CI-CD Pipeline (BHIV FINAL - NO PORT FORWARD)
 
 on:
   push:
@@ -112,25 +112,15 @@ jobs:
         kubectl rollout status deployment/executer -n prod --timeout=300s
         kubectl rollout status deployment/monitor -n prod --timeout=300s
 
-    # 🔥 SARATHI DECISION (FIXED)
+    # 🔥 SARATHI DECISION (FINAL FIX)
     - name: Sarathi Decision Gate
       run: |
         echo "Waiting for Sarathi..."
         kubectl wait --for=condition=available deployment/sarathi -n prod --timeout=120s
 
-        kubectl port-forward svc/sarathi-service 5001:5001 -n prod > pf.log 2>&1 &
-        PF_PID=$!
-
-        echo "Waiting for port-forward..."
-        for i in {1..10}; do
-          sleep 2
-          if curl -s http://localhost:5001/health > /dev/null; then
-            echo "Sarathi ready ✅"
-            break
-          fi
-        done
-
-        RESPONSE=$(curl -s -X POST http://localhost:5001/decision \
+        RESPONSE=$(kubectl run curl-sarathi --rm -i --restart=Never \
+          --image=curlimages/curl -- \
+          curl -s -X POST http://sarathi-service.prod.svc.cluster.local:5001/decision \
           -H "Content-Type: application/json" \
           -d "{\"trace_id\":\"$TRACE_ID\",\"action_type\":\"deployment\",\"payload\":{\"decision_score\":0.8}}")
 
@@ -138,45 +128,29 @@ jobs:
 
         STATUS=$(echo $RESPONSE | jq -r '.status')
 
-        kill $PF_PID
-
         if [ "$STATUS" != "ALLOW" ]; then
           echo "❌ BLOCKED BY SARATHI"
           exit 1
         fi
 
-    # 🔥 EXECUTER CALL (FIXED)
+    # 🔥 EXECUTER CALL (FINAL FIX)
     - name: Notify Executer
       run: |
         echo "Waiting for Executer..."
         kubectl wait --for=condition=available deployment/executer -n prod --timeout=120s
 
-        kubectl port-forward svc/executer-service 5003:5003 -n prod > pf-exec.log 2>&1 &
-        PF_PID=$!
-
-        for i in {1..10}; do
-          sleep 2
-          if curl -s http://localhost:5003/health > /dev/null; then
-            echo "Executer ready ✅"
-            break
-          fi
-        done
-
-        curl -X POST http://localhost:5003/execute-action \
+        kubectl run curl-exec --rm -i --restart=Never \
+          --image=curlimages/curl -- \
+          curl -X POST http://executer-service.prod.svc.cluster.local:5003/execute-action \
           -H "Content-Type: application/json" \
           -d "{\"trace_id\":\"$TRACE_ID\",\"service_id\":\"web1\",\"action\":\"scale_up\",\"decision\":\"ALLOW\"}"
-
-        kill $PF_PID
 
     # 🔹 Health Check
     - name: Health Check
       run: |
-        kubectl run curl-test --restart=Never \
+        kubectl run curl-test --rm -i --restart=Never \
           --image=curlimages/curl -- \
-          curl -f http://web1-service:5001/health
-
-        kubectl wait --for=condition=Ready pod/curl-test --timeout=30s || true
-        kubectl delete pod curl-test || true
+          curl -f http://web1-service.prod.svc.cluster.local:5001/health
 
     # 🔹 Switch Traffic
     - name: Switch Traffic
@@ -187,13 +161,11 @@ jobs:
     # 🔹 Metrics
     - name: Collect Metrics
       run: |
-        LATENCY=$(kubectl run tmp --restart=Never \
+        LATENCY=$(kubectl run tmp --rm -i --restart=Never \
           --image=curlimages/curl -- \
-          curl -o /dev/null -s -w '%{time_total}' http://web1-service:5001/health)
+          curl -o /dev/null -s -w '%{time_total}' http://web1-service.prod.svc.cluster.local:5001/health)
 
         echo "{\"trace_id\":\"$TRACE_ID\",\"latency\":$LATENCY}"
-
-        kubectl delete pod tmp || true
 
     # 🔹 Success
     - name: Success Log
@@ -201,12 +173,14 @@ jobs:
       run: |
         echo "{\"trace_id\":\"$TRACE_ID\",\"status\":\"success\"}"
 
-    # 🔹 Rollback
+    # 🔹 Rollback (SAFE)
     - name: Rollback
       if: failure()
       run: |
-        kubectl rollout undo deployment/web1-blue -n prod || true
-        kubectl rollout undo deployment/web2-blue -n prod || true
+        echo "Rollback triggered..."
+
+        kubectl rollout undo deployment/web1-blue -n prod || echo "No rollout history"
+        kubectl rollout undo deployment/web2-blue -n prod || echo "No rollout history"
 
         kubectl patch svc web1-service -n prod -p '{"spec":{"selector":{"app":"web1","version":"blue"}}}' || true
         kubectl patch svc web2-service -n prod -p '{"spec":{"selector":{"app":"web2","version":"blue"}}}' || true
