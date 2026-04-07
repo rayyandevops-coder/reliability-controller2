@@ -1,4 +1,4 @@
-name: CI-CD Pipeline (BHIV FINAL - PERFECT)
+name: CI-CD Pipeline (BHIV FINAL - STABLE & COMPLETE)
 
 on:
   push:
@@ -96,7 +96,7 @@ jobs:
         kubectl rollout status deployment/executer -n staging --timeout=300s
         kubectl rollout status deployment/monitor -n staging --timeout=300s
 
-    # 🔹 Deploy PROD FIRST (IMPORTANT FIX)
+    # 🔹 Deploy PROD
     - name: Deploy to PROD
       run: |
         kubectl create namespace prod || true
@@ -112,11 +112,15 @@ jobs:
         kubectl rollout status deployment/executer -n prod --timeout=300s
         kubectl rollout status deployment/monitor -n prod --timeout=300s
 
-    # 🔥 SARATHI DECISION (NOW CORRECT)
+    # 🔥 SARATHI DECISION
     - name: Sarathi Decision Gate
       run: |
-        kubectl port-forward svc/sarathi-service 5001:5001 -n prod &
+        echo "Waiting for Sarathi..."
+        kubectl wait --for=condition=available deployment/sarathi -n prod --timeout=120s
+
+        kubectl port-forward svc/sarathi-service 5001:5001 -n prod > /dev/null 2>&1 &
         PF_PID=$!
+
         sleep 5
 
         RESPONSE=$(curl -s -X POST http://localhost:5001/decision \
@@ -134,11 +138,15 @@ jobs:
           exit 1
         fi
 
-    # 🔥 EXECUTER CALL (NOW CLEAN)
+    # 🔥 EXECUTER CALL
     - name: Notify Executer
       run: |
-        kubectl port-forward svc/executer-service 5003:5003 -n prod &
+        echo "Waiting for Executer..."
+        kubectl wait --for=condition=available deployment/executer -n prod --timeout=120s
+
+        kubectl port-forward svc/executer-service 5003:5003 -n prod > /dev/null 2>&1 &
         PF_PID=$!
+
         sleep 5
 
         curl -X POST http://localhost:5003/execute-action \
@@ -163,8 +171,44 @@ jobs:
         kubectl patch svc web1-service -n prod -p '{"spec":{"selector":{"app":"web1","version":"green"}}}'
         kubectl patch svc web2-service -n prod -p '{"spec":{"selector":{"app":"web2","version":"green"}}}'
 
+    # 🔹 Metrics
+    - name: Collect Metrics
+      run: |
+        LATENCY=$(kubectl run tmp --restart=Never \
+          --image=curlimages/curl -- \
+          curl -o /dev/null -s -w '%{time_total}' http://web1-service:5001/health)
+
+        echo "{\"trace_id\":\"$TRACE_ID\",\"latency\":$LATENCY}"
+
+        kubectl delete pod tmp || true
+
     # 🔹 Success
     - name: Success Log
       if: success()
       run: |
         echo "{\"trace_id\":\"$TRACE_ID\",\"status\":\"success\"}"
+
+    # 🔹 Rollback
+    - name: Rollback
+      if: failure()
+      run: |
+        kubectl rollout undo deployment/web1-blue -n prod || true
+        kubectl rollout undo deployment/web2-blue -n prod || true
+
+        kubectl patch svc web1-service -n prod -p '{"spec":{"selector":{"app":"web1","version":"blue"}}}' || true
+        kubectl patch svc web2-service -n prod -p '{"spec":{"selector":{"app":"web2","version":"blue"}}}' || true
+
+    # 🔹 Failure Log
+    - name: Failure Log
+      if: failure()
+      run: |
+        echo "{\"trace_id\":\"$TRACE_ID\",\"status\":\"rollback\"}"
+
+    # 🔹 Final Output
+    - name: Final Output
+      if: always()
+      run: |
+        echo "{
+          \"trace_id\":\"$TRACE_ID\",
+          \"deployment_type\":\"blue-green\"
+        }"
