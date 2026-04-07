@@ -1,4 +1,4 @@
-name: CI-CD Pipeline (BHIV FINAL - STABLE & COMPLETE)
+name: CI-CD Pipeline (BHIV FINAL - FIXED)
 
 on:
   push:
@@ -86,7 +86,7 @@ jobs:
         kubectl apply -f k8s/executer.yml -n staging
         kubectl apply -f k8s/monitor.yml -n staging
 
-    # 🔹 Wait STAGING
+    # 🔹 Verify STAGING
     - name: Verify STAGING
       run: |
         set -e
@@ -112,16 +112,23 @@ jobs:
         kubectl rollout status deployment/executer -n prod --timeout=300s
         kubectl rollout status deployment/monitor -n prod --timeout=300s
 
-    # 🔥 SARATHI DECISION
+    # 🔥 SARATHI DECISION (FIXED)
     - name: Sarathi Decision Gate
       run: |
         echo "Waiting for Sarathi..."
         kubectl wait --for=condition=available deployment/sarathi -n prod --timeout=120s
 
-        kubectl port-forward svc/sarathi-service 5001:5001 -n prod > /dev/null 2>&1 &
+        kubectl port-forward svc/sarathi-service 5001:5001 -n prod > pf.log 2>&1 &
         PF_PID=$!
 
-        sleep 5
+        echo "Waiting for port-forward..."
+        for i in {1..10}; do
+          sleep 2
+          if curl -s http://localhost:5001/health > /dev/null; then
+            echo "Sarathi ready ✅"
+            break
+          fi
+        done
 
         RESPONSE=$(curl -s -X POST http://localhost:5001/decision \
           -H "Content-Type: application/json" \
@@ -138,16 +145,22 @@ jobs:
           exit 1
         fi
 
-    # 🔥 EXECUTER CALL
+    # 🔥 EXECUTER CALL (FIXED)
     - name: Notify Executer
       run: |
         echo "Waiting for Executer..."
         kubectl wait --for=condition=available deployment/executer -n prod --timeout=120s
 
-        kubectl port-forward svc/executer-service 5003:5003 -n prod > /dev/null 2>&1 &
+        kubectl port-forward svc/executer-service 5003:5003 -n prod > pf-exec.log 2>&1 &
         PF_PID=$!
 
-        sleep 5
+        for i in {1..10}; do
+          sleep 2
+          if curl -s http://localhost:5003/health > /dev/null; then
+            echo "Executer ready ✅"
+            break
+          fi
+        done
 
         curl -X POST http://localhost:5003/execute-action \
           -H "Content-Type: application/json" \
