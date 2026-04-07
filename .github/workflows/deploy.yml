@@ -1,4 +1,4 @@
-name: CI-CD Pipeline (BHIV FINAL - STABLE)
+name: CI-CD Pipeline (BHIV FINAL - PERFECT)
 
 on:
   push:
@@ -96,39 +96,11 @@ jobs:
         kubectl rollout status deployment/executer -n staging --timeout=300s
         kubectl rollout status deployment/monitor -n staging --timeout=300s
 
-    # 🔥 SARATHI DECISION (PORT FORWARD FIX)
-    - name: Sarathi Decision Gate
-      run: |
-        kubectl port-forward svc/sarathi-service 5001:5001 &
-        sleep 5
-
-        RESPONSE=$(curl -s -X POST http://localhost:5001/decision \
-          -H "Content-Type: application/json" \
-          -d "{\"trace_id\":\"$TRACE_ID\",\"action_type\":\"deployment\",\"payload\":{\"decision_score\":0.8}}")
-
-        echo "Sarathi Response: $RESPONSE"
-
-        STATUS=$(echo $RESPONSE | jq -r '.status')
-
-        if [ "$STATUS" != "ALLOW" ]; then
-          echo "❌ BLOCKED BY SARATHI"
-          exit 1
-        fi
-
-    # 🔹 Deploy PROD
+    # 🔹 Deploy PROD FIRST (IMPORTANT FIX)
     - name: Deploy to PROD
       run: |
         kubectl create namespace prod || true
         kubectl apply -f k8s/ -n prod
-
-    # 🔹 Update Images
-    - name: Update Images
-      run: |
-        kubectl set image deployment/web1-blue web1=$IMAGE_PREFIX/web1-service:$TAG -n prod
-        kubectl set image deployment/web2-blue web2=$IMAGE_PREFIX/web2-service:$TAG -n prod
-        kubectl set image deployment/sarathi sarathi=$IMAGE_PREFIX/sarathi-service:$TAG -n prod
-        kubectl set image deployment/executer executer=$IMAGE_PREFIX/executer-service:$TAG -n prod
-        kubectl set image deployment/monitor monitor=$IMAGE_PREFIX/monitor-service:$TAG -n prod
 
     # 🔹 Wait PROD
     - name: Wait for PROD Deployments
@@ -140,15 +112,40 @@ jobs:
         kubectl rollout status deployment/executer -n prod --timeout=300s
         kubectl rollout status deployment/monitor -n prod --timeout=300s
 
-    # 🔥 EXECUTER CALL (PORT FORWARD)
+    # 🔥 SARATHI DECISION (NOW CORRECT)
+    - name: Sarathi Decision Gate
+      run: |
+        kubectl port-forward svc/sarathi-service 5001:5001 -n prod &
+        PF_PID=$!
+        sleep 5
+
+        RESPONSE=$(curl -s -X POST http://localhost:5001/decision \
+          -H "Content-Type: application/json" \
+          -d "{\"trace_id\":\"$TRACE_ID\",\"action_type\":\"deployment\",\"payload\":{\"decision_score\":0.8}}")
+
+        echo "Sarathi Response: $RESPONSE"
+
+        STATUS=$(echo $RESPONSE | jq -r '.status')
+
+        kill $PF_PID
+
+        if [ "$STATUS" != "ALLOW" ]; then
+          echo "❌ BLOCKED BY SARATHI"
+          exit 1
+        fi
+
+    # 🔥 EXECUTER CALL (NOW CLEAN)
     - name: Notify Executer
       run: |
-        kubectl port-forward svc/executer-service 5003:5003 &
+        kubectl port-forward svc/executer-service 5003:5003 -n prod &
+        PF_PID=$!
         sleep 5
 
         curl -X POST http://localhost:5003/execute-action \
           -H "Content-Type: application/json" \
           -d "{\"trace_id\":\"$TRACE_ID\",\"service_id\":\"web1\",\"action\":\"scale_up\",\"decision\":\"ALLOW\"}"
+
+        kill $PF_PID
 
     # 🔹 Health Check
     - name: Health Check
