@@ -66,6 +66,7 @@ def check_services():
             error_rate = 1.0
             action = "restart"
 
+        # DETECTION LOG
         log("DETECTION",
             service=service_id,
             status=status,
@@ -74,18 +75,16 @@ def check_services():
             memory=memory,
             error_rate=error_rate)
 
-        if action == "noop":
-            continue
-
-        # ✅ BHIV CORRECT — SIGNAL ONLY
-        log("SIGNAL_EMITTED",
-            service=service_id,
-            suggested_action=action,
-            metrics={
-                "cpu": cpu,
-                "memory": memory,
-                "error_rate": error_rate
-            })
+        # ✅ SIGNAL ONLY (NO EXECUTION)
+        if action != "noop":
+            log("SIGNAL_EMITTED",
+                service=service_id,
+                suggested_action=action,
+                metrics={
+                    "cpu": cpu,
+                    "memory": memory,
+                    "error_rate": error_rate
+                })
 
 
 def monitor_loop():

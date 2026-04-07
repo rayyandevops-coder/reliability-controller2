@@ -25,10 +25,6 @@ spec:
         ports:
         - containerPort: 5004
 
-        env:
-        - name: EXECUTER_URL
-          value: "http://executer-service:5003"
-
         resources:
           requests:
             memory: "50Mi"

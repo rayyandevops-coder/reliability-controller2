@@ -1,121 +1,146 @@
-======================== README.md ========================
+# 🚀 Pravah — BHIV Compliant Execution System
 
-Pravah CI/CD – Traceable, Governed and Observable Deployment System
+## 📌 Overview
 
-This project implements a production-grade CI/CD pipeline deployed on Kubernetes using AWS EC2 instances. The system ensures safe, controlled, and observable deployments.
+Pravah is a production-grade, BHIV-compliant CI/CD system with strict architectural separation between decision, governance, execution, and monitoring layers.
 
-Architecture Overview
+This project demonstrates a **traceable, governed, and observable deployment system**.
 
-The system is built using microservices deployed on a Kubernetes cluster with:
+---
 
-one master node
-one worker node
-namespaces: staging and production
+## 🧠 Architecture
 
-An Elastic IP is used to ensure consistent access to services.
+Final Flow:
 
-Services included:
+CI/CD Pipeline  
+→ Sarathi (Decision Engine)  
+→ Governance (Validation Layer)  
+→ Executer (Execution Engine)  
+→ Bucket (Logging Layer)  
+→ Monitor (Signal Layer)
 
-web1 using blue-green deployment
-web2 using blue-green deployment
-sarathi for decision making
-executer for execution
-monitor for observability
+---
 
-Pipeline Flow
+## 🔹 Components
 
-Code push triggers GitHub Actions pipeline.
+### 1. Sarathi (Decision Layer)
+- Evaluates deployment requests
+- Returns: ALLOW / BLOCK / ESCALATE
 
-Pipeline stages:
+---
 
-generate trace identifiers
-build and push Docker images
-deploy to staging
-validate staging rollout
-deploy to production
-verify deployments
-perform health checks
-switch traffic
-collect metrics
-output final deployment status
+### 2. Governance Layer
+- Validates deployment requests
+- Enforces rules
+- Returns: ALLOW / BLOCK
+- No routing, no execution
 
-Traceability
+---
 
-Each deployment is tracked using:
+### 3. Executer (Execution Layer)
+- Executes actions ONLY if allowed
+- Supports:
+  - restart
+  - scale_up
+  - scale_down
+- Performs:
+  - execution
+  - verification
+  - outcome logging
 
-trace_id
-execution_id
-deployment_id
+---
 
-These identifiers are included in all logs to ensure full traceability.
+### 4. Bucket (Logging Layer)
+- Append-only logging system
+- No read / no overwrite
+- Stores:
+  - trace logs
+  - execution logs
+  - final status
 
-Governance
+---
 
-A governance layer enforces deterministic rules after decision-making. It ensures that only valid deployment actions are executed.
+### 5. Monitor (Signal Layer)
+- Detects anomalies
+- Emits signals ONLY
+- Does NOT trigger execution
 
-If governance blocks a request:
+---
 
-deployment stops immediately
-no changes are applied
+## 🔍 Features
 
-Observability
+- ✅ Blue-Green Deployment
+- ✅ Full Traceability (trace_id, execution_id)
+- ✅ Governance Enforcement
+- ✅ Decision Engine (Sarathi)
+- ✅ Observability (latency, success, failure)
+- ✅ Automatic Rollback
+- ✅ Structured Logging (JSON)
+- ✅ Health Checks
+- ✅ Kubernetes-based deployment
 
-The system provides observability through:
+---
 
-structured logging
-latency tracking
-error rate monitoring
-health checks
-alert generation
+## ⚙️ Tech Stack
 
-Monitor service detects issues and emits signals without triggering execution.
+- Python (Flask)
+- Docker
+- Kubernetes
+- GitHub Actions
+- REST APIs
 
-Bucket Logging
+---
 
-All logs are written to an append-only logging system. Logs are structured in JSON format and include trace information.
+## 🚀 How It Works
 
-Deployment Strategy
+1. Code pushed to main branch
+2. GitHub Actions pipeline starts
+3. Sarathi evaluates deployment
+4. Governance validates request
+5. Executer performs deployment
+6. Logs stored in bucket
+7. Monitor observes system
 
-Blue-green deployment is used for web services to ensure zero downtime. Rolling updates are used for internal services.
+---
 
-Rollback Mechanism
+## 📊 Example Execution Trace
+{
+"trace_id": "abc123",
+"stage": "decision"
+}
+{
+"trace_id": "abc123",
+"stage": "governance",
+"decision": "ALLOW"
+}
+{
+"trace_id": "abc123",
+"stage": "execution"
+}
+{
+"trace_id": "abc123",
+"stage": "final_status"
+}
 
-If deployment fails:
+---
 
-previous version is restored
-traffic is redirected back
-rollback event is logged
+## 🎯 BHIV Compliance
 
-Setup Instructions
+✔ Separation of Concerns  
+✔ Control Plane vs Execution Plane  
+✔ No cross-layer violations  
+✔ Strict boundary enforcement  
 
-Create EC2 instances
-Install Kubernetes using kubeadm
-Join worker node to cluster
-Configure kubectl
-Allocate Elastic IP
-Configure security groups
-Set GitHub secrets
-Push code to main branch
+---
 
-Verification
+## 👨‍💻 Author
 
-Commands:
+Rayyan Shaikh  
+B.Tech IT — Cloud & DevOps
 
-kubectl get pods -n prod
-kubectl rollout status deployment/web1-blue -n prod
+---
 
-Test endpoints:
+## 🏁 Status
 
-curl http://<elastic-ip>:30001/health
-
-Expected Output
-
-zero downtime deployment
-successful rollout
-structured logs
-metrics output
-traceable deployment
-
-Final Result
-
-The system evolves from a standard CI/CD pipeline into a governed and observable execution system aligned with BHIV architecture principles.
+✅ Final Boundary Alignment Complete  
+✅ Ready for Production / Evaluation  
