@@ -1,4 +1,4 @@
-name: CI-CD Pipeline (BHIV FINAL - NO PORT FORWARD)
+name: CI-CD Pipeline (BHIV FINAL - STABLE)
 
 on:
   push:
@@ -112,13 +112,13 @@ jobs:
         kubectl rollout status deployment/executer -n prod --timeout=300s
         kubectl rollout status deployment/monitor -n prod --timeout=300s
 
-    # 🔥 SARATHI DECISION (FINAL FIX)
+    # 🔥 SARATHI DECISION
     - name: Sarathi Decision Gate
       run: |
         echo "Waiting for Sarathi..."
         kubectl wait --for=condition=available deployment/sarathi -n prod --timeout=120s
 
-        RESPONSE=$(kubectl run curl-sarathi --rm -i --restart=Never \
+        RESPONSE=$(kubectl run curl-sarathi --rm --restart=Never \
           --image=curlimages/curl -- \
           curl -s -X POST http://sarathi-service.prod.svc.cluster.local:5001/decision \
           -H "Content-Type: application/json" \
@@ -133,13 +133,13 @@ jobs:
           exit 1
         fi
 
-    # 🔥 EXECUTER CALL (FINAL FIX)
+    # 🔥 EXECUTER CALL
     - name: Notify Executer
       run: |
         echo "Waiting for Executer..."
         kubectl wait --for=condition=available deployment/executer -n prod --timeout=120s
 
-        kubectl run curl-exec --rm -i --restart=Never \
+        kubectl run curl-exec --rm --restart=Never \
           --image=curlimages/curl -- \
           curl -X POST http://executer-service.prod.svc.cluster.local:5003/execute-action \
           -H "Content-Type: application/json" \
@@ -148,7 +148,7 @@ jobs:
     # 🔹 Health Check
     - name: Health Check
       run: |
-        kubectl run curl-test --rm -i --restart=Never \
+        kubectl run curl-test --rm --restart=Never \
           --image=curlimages/curl -- \
           curl -f http://web1-service.prod.svc.cluster.local:5001/health
 
@@ -161,7 +161,7 @@ jobs:
     # 🔹 Metrics
     - name: Collect Metrics
       run: |
-        LATENCY=$(kubectl run tmp --rm -i --restart=Never \
+        LATENCY=$(kubectl run tmp --rm --restart=Never \
           --image=curlimages/curl -- \
           curl -o /dev/null -s -w '%{time_total}' http://web1-service.prod.svc.cluster.local:5001/health)
 
@@ -173,7 +173,7 @@ jobs:
       run: |
         echo "{\"trace_id\":\"$TRACE_ID\",\"status\":\"success\"}"
 
-    # 🔹 Rollback (SAFE)
+    # 🔹 Rollback
     - name: Rollback
       if: failure()
       run: |
