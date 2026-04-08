@@ -5,9 +5,9 @@ import time
 
 app = Flask(__name__)
 
-# ─────────────────────────────────────────────────────────────
-# SIGNAL GENERATOR (STANDARD CONTRACT)
-# ─────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────
+# STANDARD SIGNAL CONTRACT
+# ─────────────────────────────────────────────
 def generate_signal(trace_id, signal_type, severity, metrics, recommended_action):
     return {
         "trace_id": trace_id,
@@ -19,30 +19,29 @@ def generate_signal(trace_id, signal_type, severity, metrics, recommended_action
         "timestamp": int(time.time())
     }
 
-
-# ─────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────
 # METRICS ENGINE
-# ─────────────────────────────────────────────────────────────
-@app.route("/metrics", methods=["GET"])
+# ─────────────────────────────────────────────
+@app.route("/metrics")
 def metrics():
     import random
 
     latency = random.randint(100, 900)
     error_rate = round(random.uniform(0, 1), 2)
+    pod_health = "healthy" if latency < 700 else "degraded"
 
     data = {
         "latency": latency,
         "error_rate": error_rate,
-        "status": "healthy"
+        "pod_health": pod_health
     }
 
     print(f"[PRAVAH METRICS] {data}", flush=True)
     return jsonify(data)
 
-
-# ─────────────────────────────────────────────────────────────
-# SIGNAL EMISSION (CORE)
-# ─────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────
+# SIGNAL EMISSION (NO EXECUTION)
+# ─────────────────────────────────────────────
 @app.route("/emit-signal", methods=["POST"])
 def emit_signal():
     data = request.get_json()
@@ -50,9 +49,15 @@ def emit_signal():
     trace_id = data.get("trace_id", "unknown")
     latency = data.get("latency", 0)
     error_rate = data.get("error_rate", 0)
+    deployment_status = data.get("deployment_status", "success")
 
-    # ─── DETERMINISTIC SIGNAL LOGIC ───
-    if latency > 700:
+    # ─── DETERMINISTIC SIGNALS ───
+    if deployment_status == "failed":
+        signal_type = "deployment_failure"
+        severity = "HIGH"
+        recommended_action = "rollback"
+
+    elif latency > 700:
         signal_type = "latency_spike"
         severity = "HIGH"
         recommended_action = "scale_up"
@@ -61,11 +66,6 @@ def emit_signal():
         signal_type = "health_degradation"
         severity = "MEDIUM"
         recommended_action = "restart"
-
-    elif latency < 300 and error_rate < 0.2:
-        signal_type = "normal"
-        severity = "LOW"
-        recommended_action = "none"
 
     else:
         signal_type = "anomaly_detected"
@@ -78,31 +78,22 @@ def emit_signal():
         severity,
         {
             "latency": latency,
-            "error_rate": error_rate
+            "error_rate": error_rate,
+            "deployment_status": deployment_status
         },
         recommended_action
     )
 
-    # ─── LOG SIGNAL (NO EXECUTION) ───
     print(f"[PRAVAH SIGNAL EMITTED] {signal}", flush=True)
 
-    # ─── ALERT (NO EXECUTION) ───
     if severity == "HIGH":
-        print(f"[ALERT] High severity issue detected: {signal_type}", flush=True)
+        print(f"[ALERT] {signal_type} detected trace={trace_id}", flush=True)
 
     return jsonify(signal)
 
-
-# ─────────────────────────────────────────────────────────────
-# HEALTH CHECK
-# ─────────────────────────────────────────────────────────────
 @app.route("/health")
 def health():
     return jsonify({"status": "pravah_running"})
 
-
-# ─────────────────────────────────────────────────────────────
-# ENTRY POINT
-# ─────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5004)
