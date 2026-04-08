@@ -14,7 +14,7 @@ jobs:
     steps:
 
     # 🔹 Checkout Repo
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
 
     # 🔹 Generate Trace ID (GLOBAL)
     - name: Generate Trace ID
@@ -22,7 +22,7 @@ jobs:
         echo "TRACE_ID=$(uuidgen)" >> $GITHUB_ENV
 
     # 🔹 Setup kubectl
-    - uses: azure/setup-kubectl@v4
+    - uses: azure/setup-kubectl@v5
 
     # 🔹 Configure kubeconfig
     - name: Configure kubeconfig
