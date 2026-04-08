@@ -1,4 +1,4 @@
-name: CI-CD Pipeline (BHIV FINAL - NO CONFLICTS)
+name: CI-CD Pipeline (PRAVAH FINAL)
 
 on:
   push:
@@ -14,17 +14,29 @@ jobs:
 
     steps:
 
+    # 🔹 Checkout
     - uses: actions/checkout@v4
 
-    - name: Generate Trace IDs
+    # 🔹 Generate Trace ID
+    - name: Generate Trace ID
       run: |
         echo "TRACE_ID=$(uuidgen)" >> $GITHUB_ENV
 
+    # 🔹 Governance Gate (basic)
+    - name: Governance Gate
+      run: |
+        if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
+          echo "BLOCKED"
+          exit 1
+        fi
+
+    # 🔹 Docker Login
     - uses: docker/login-action@v3
       with:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
 
+    # 🔹 Build & Push Images
     - name: Build & Push
       run: |
         docker build -t $IMAGE_PREFIX/web1-service:$GITHUB_SHA ./web1
@@ -39,26 +51,31 @@ jobs:
         docker push $IMAGE_PREFIX/executer-service:$GITHUB_SHA
         docker push $IMAGE_PREFIX/monitor-service:$GITHUB_SHA
 
+    # 🔹 Kubectl Setup
     - uses: azure/setup-kubectl@v4
 
+    # 🔹 Configure kubeconfig
     - name: Configure kubeconfig
       run: |
         mkdir -p $HOME/.kube
         echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
 
+    # 🔹 Deploy to PROD
     - name: Deploy
       run: |
         kubectl create namespace prod || true
         kubectl apply -f k8s/ -n prod
 
+    # 🔹 Wait for Deployments
     - name: Wait
       run: |
-        kubectl rollout status deployment/sarathi -n prod
-        kubectl rollout status deployment/executer -n prod
-        kubectl rollout status deployment/web1-blue -n prod
-        kubectl rollout status deployment/web2-blue -n prod
+        kubectl rollout status deployment/sarathi -n prod --timeout=300s
+        kubectl rollout status deployment/executer -n prod --timeout=300s
+        kubectl rollout status deployment/monitor -n prod --timeout=300s
+        kubectl rollout status deployment/web1-blue -n prod --timeout=300s
+        kubectl rollout status deployment/web2-blue -n prod --timeout=300s
 
-    # 🔥 SARATHI
+    # 🔥 SARATHI DECISION (TRACE CONTINUITY)
     - name: Sarathi Decision
       run: |
         POD=curl-sarathi-$TRACE_ID
@@ -74,22 +91,23 @@ jobs:
           curl -s -X POST http://sarathi-service.prod.svc.cluster.local:5001/decision \
           -H "Content-Type: application/json" \
           -d "{\"trace_id\":\"$TRACE_ID\",\"action_type\":\"deployment\",\"payload\":{\"decision_score\":0.8}}" \
-          > response.json
+          > sarathi.json
 
-        cat response.json
+        cat sarathi.json
 
-        STATUS=$(jq -r '.status' response.json)
+        STATUS=$(jq -r '.status' sarathi.json)
 
         kubectl delete pod $POD
 
         if [ "$STATUS" != "ALLOW" ]; then
+          echo "BLOCKED BY SARATHI"
           exit 1
         fi
 
-    # 🔥 EXECUTER
-    - name: Executer Call
+    # 🔥 PRAVAH SIGNAL (ALLOW CASE)
+    - name: Emit Pravah Signal (ALLOW)
       run: |
-        POD=curl-exec-$TRACE_ID
+        POD=curl-signal-allow-$TRACE_ID
 
         kubectl run $POD \
           --image=curlimages/curl \
@@ -99,16 +117,35 @@ jobs:
         kubectl wait --for=condition=Ready pod/$POD --timeout=60s
 
         kubectl exec $POD -- \
-          curl -X POST http://executer-service.prod.svc.cluster.local:5003/execute-action \
+          curl -s -X POST http://monitor-service.prod.svc.cluster.local:5004/emit-signal \
           -H "Content-Type: application/json" \
-          -d "{\"trace_id\":\"$TRACE_ID\",\"service_id\":\"web1\",\"action\":\"scale_up\",\"decision\":\"ALLOW\"}"
+          -d "{\"trace_id\":\"$TRACE_ID\",\"latency\":200,\"error_rate\":0.1}"
 
         kubectl delete pod $POD
 
-    # 🔹 HEALTH
+    # 🔥 PRAVAH SIGNAL (FAILURE CASE)
+    - name: Emit Pravah Signal (FAILURE)
+      run: |
+        POD=curl-signal-fail-$TRACE_ID
+
+        kubectl run $POD \
+          --image=curlimages/curl \
+          --restart=Never \
+          --command -- sleep 10
+
+        kubectl wait --for=condition=Ready pod/$POD --timeout=60s
+
+        kubectl exec $POD -- \
+          curl -s -X POST http://monitor-service.prod.svc.cluster.local:5004/emit-signal \
+          -H "Content-Type: application/json" \
+          -d "{\"trace_id\":\"$TRACE_ID\",\"latency\":850,\"error_rate\":0.2}"
+
+        kubectl delete pod $POD
+
+    # 🔹 Health Check
     - name: Health Check
       run: |
-        POD=curl-test-$TRACE_ID
+        POD=curl-health-$TRACE_ID
 
         kubectl run $POD \
           --image=curlimages/curl \
@@ -122,5 +159,23 @@ jobs:
 
         kubectl delete pod $POD
 
+    # 🔹 Success Log
     - name: Success
-      run: echo "Deployment Successful"
+      if: success()
+      run: |
+        echo "{\"trace_id\":\"$TRACE_ID\",\"status\":\"success\"}"
+
+    # 🔹 Failure Log
+    - name: Failure
+      if: failure()
+      run: |
+        echo "{\"trace_id\":\"$TRACE_ID\",\"status\":\"failure\"}"
+
+    # 🔹 Final Output
+    - name: Final Output
+      if: always()
+      run: |
+        echo "{
+          \"trace_id\":\"$TRACE_ID\",
+          \"system\":\"pravah\"
+        }"
