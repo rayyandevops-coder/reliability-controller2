@@ -1,12 +1,13 @@
-# monitor/app.py — PRAVAH (Observability + Signal Layer)
+# monitor/app.py — FINAL PRAVAH (TANTRA COMPLIANT)
 
 from flask import Flask, request, jsonify
 import time
+import random
 
 app = Flask(__name__)
 
 # ─────────────────────────────────────────────
-# STANDARD SIGNAL CONTRACT
+# SIGNAL GENERATOR
 # ─────────────────────────────────────────────
 def generate_signal(trace_id, signal_type, severity, metrics, recommended_action):
     return {
@@ -20,12 +21,10 @@ def generate_signal(trace_id, signal_type, severity, metrics, recommended_action
     }
 
 # ─────────────────────────────────────────────
-# METRICS ENGINE
+# METRICS ENGINE (DETECT + MEASURE ONLY)
 # ─────────────────────────────────────────────
 @app.route("/metrics")
 def metrics():
-    import random
-
     latency = random.randint(100, 900)
     error_rate = round(random.uniform(0, 1), 2)
     pod_health = "healthy" if latency < 700 else "degraded"
@@ -36,7 +35,12 @@ def metrics():
         "pod_health": pod_health
     }
 
-    print(f"[PRAVAH METRICS] {data}", flush=True)
+    print({
+        "event": "METRICS_COLLECTED",
+        "trace_id": "N/A",
+        "metrics": data
+    }, flush=True)
+
     return jsonify(data)
 
 # ─────────────────────────────────────────────
@@ -46,12 +50,12 @@ def metrics():
 def emit_signal():
     data = request.get_json()
 
-    trace_id = data.get("trace_id", "unknown")
+    trace_id = data.get("trace_id")
     latency = data.get("latency", 0)
     error_rate = data.get("error_rate", 0)
     deployment_status = data.get("deployment_status", "success")
 
-    # ─── DETERMINISTIC SIGNALS ───
+    # 🔥 DETERMINISTIC SIGNAL LOGIC
     if deployment_status == "failed":
         signal_type = "deployment_failure"
         severity = "HIGH"
@@ -60,7 +64,7 @@ def emit_signal():
     elif latency > 700:
         signal_type = "latency_spike"
         severity = "HIGH"
-        recommended_action = "scale_up"
+        recommended_action = "scale"
 
     elif error_rate > 0.5:
         signal_type = "health_degradation"
@@ -84,16 +88,22 @@ def emit_signal():
         recommended_action
     )
 
-    print(f"[PRAVAH SIGNAL EMITTED] {signal}", flush=True)
+    print({
+        "event": "SIGNAL_EMITTED",
+        "trace_id": trace_id,
+        "signal": signal
+    }, flush=True)
 
+    # ALERT (ONLY LOG — NO ACTION)
     if severity == "HIGH":
-        print(f"[ALERT] {signal_type} detected trace={trace_id}", flush=True)
+        print({
+            "event": "ALERT",
+            "trace_id": trace_id,
+            "signal_type": signal_type
+        }, flush=True)
 
     return jsonify(signal)
 
 @app.route("/health")
 def health():
     return jsonify({"status": "pravah_running"})
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5004)
