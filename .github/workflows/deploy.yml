@@ -1,4 +1,4 @@
-name: PRAVAH Full CI/CD + Blue-Green + Observability (FINAL)
+name: PRAVAH Full CI/CD + Blue-Green (FINAL FIXED)
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
       - main
 
 env:
-  IMAGE_TAG: v2
+  IMAGE_TAG: v3
 
 jobs:
   pravah:
@@ -14,26 +14,24 @@ jobs:
 
     steps:
 
-    # =========================================
+    # ==============================
     # 🔹 CHECKOUT
-    # =========================================
+    # ==============================
     - uses: actions/checkout@v5
 
-    # =========================================
     # 🔹 TRACE ID
-    # =========================================
     - name: Generate Trace ID
       run: echo "TRACE_ID=$(uuidgen)" >> $GITHUB_ENV
 
-    # =========================================
+    # ==============================
     # 🔹 DOCKER LOGIN
-    # =========================================
-    - name: Login to DockerHub
+    # ==============================
+    - name: Login DockerHub
       run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
-    # =========================================
+    # ==============================
     # 🔥 BUILD & PUSH IMAGES
-    # =========================================
+    # ==============================
     - name: Build & Push Images
       run: |
         docker build -t ${{ secrets.DOCKER_USERNAME }}/monitor-service:$IMAGE_TAG ./monitor
@@ -48,9 +46,9 @@ jobs:
         docker push ${{ secrets.DOCKER_USERNAME }}/web1-service:$IMAGE_TAG
         docker push ${{ secrets.DOCKER_USERNAME }}/web2-service:$IMAGE_TAG
 
-    # =========================================
+    # ==============================
     # 🔹 KUBECTL SETUP
-    # =========================================
+    # ==============================
     - uses: azure/setup-kubectl@v5
 
     - name: Configure kubeconfig
@@ -58,28 +56,45 @@ jobs:
         mkdir -p $HOME/.kube
         echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
 
-    # =========================================
+    # ==============================
     # 🔥 CREATE NAMESPACES
-    # =========================================
+    # ==============================
     - name: Create Namespaces
       run: |
         kubectl create namespace prod || true
         kubectl create namespace staging || true
 
-    # =========================================
-    # 🚀 DEPLOY STAGING
-    # =========================================
+    # ==============================
+    # 🚀 STAGING DEPLOY
+    # ==============================
     - name: Deploy Staging
       run: |
         kubectl apply -f k8s/staging/ -n staging
 
-    - name: Wait for Staging
+    - name: Wait Staging
       run: |
         kubectl wait --for=condition=available deployment --all -n staging --timeout=180s
 
-    # =========================================
-    # 🟢 DEPLOY GREEN (NEW VERSION)
-    # =========================================
+    # ==============================
+    # 🚀 BASE PROD (BLUE)
+    # ==============================
+    - name: Deploy Base System (BLUE)
+      run: |
+        kubectl apply -f k8s/web1-blue.yml -n prod
+        kubectl apply -f k8s/web2-blue.yml -n prod
+        kubectl apply -f k8s/web1-service.yml -n prod
+        kubectl apply -f k8s/web2-service.yml -n prod
+        kubectl apply -f k8s/monitor.yml -n prod
+        kubectl apply -f k8s/executer.yml -n prod
+        kubectl apply -f k8s/sarathi.yml -n prod
+
+    - name: Wait Base System
+      run: |
+        kubectl wait --for=condition=available deployment --all -n prod --timeout=180s
+
+    # ==============================
+    # 🟢 DEPLOY GREEN
+    # ==============================
     - name: Deploy Green
       run: |
         kubectl apply -f k8s/web1-green.yml -n prod
@@ -90,26 +105,26 @@ jobs:
         kubectl rollout status deployment/web1-green -n prod
         kubectl rollout status deployment/web2-green -n prod
 
-    # =========================================
-    # 🔄 SWITCH TRAFFIC (BLUE → GREEN)
-    # =========================================
-    - name: Switch Traffic
+    # ==============================
+    # 🔄 SWITCH TRAFFIC
+    # ==============================
+    - name: Switch Traffic to Green
       run: |
         kubectl patch service web1-service -n prod -p '{"spec":{"selector":{"app":"web1","version":"green"}}}'
         kubectl patch service web2-service -n prod -p '{"spec":{"selector":{"app":"web2","version":"green"}}}'
 
-    # =========================================
+    # ==============================
     # 🔍 VERIFY
-    # =========================================
-    - name: Verify Services
+    # ==============================
+    - name: Verify Deployment
       run: |
-        kubectl get svc -n prod
         kubectl get pods -n prod
+        kubectl get svc -n prod
 
-    # =========================================
-    # 🔥 PRAVAH SIGNAL TEST
-    # =========================================
-    - name: Emit Signals
+    # ==============================
+    # 🔥 PRAVAH TEST
+    # ==============================
+    - name: Emit Signal
       run: |
         POD=test-$TRACE_ID
         kubectl run $POD --image=curlimages/curl --restart=Never --command -- sleep 10
@@ -126,16 +141,16 @@ jobs:
 
         kubectl delete pod $POD
 
-    # =========================================
+    # ==============================
     # 🔹 LOGS
-    # =========================================
+    # ==============================
     - name: Fetch Logs
       run: |
         kubectl logs -n prod deploy/monitor | tail -n 20
 
-    # =========================================
+    # ==============================
     # 🔹 FINAL TRACE
-    # =========================================
+    # ==============================
     - name: Final Trace
       run: |
         echo "{
@@ -144,9 +159,10 @@ jobs:
             \"docker_build\",
             \"docker_push\",
             \"staging_deploy\",
+            \"blue_deploy\",
             \"green_deploy\",
             \"traffic_switch\",
             \"signals_verified\"
           ],
-          \"level\":\"production_ready\"
+          \"status\":\"production_ready\"
         }"
