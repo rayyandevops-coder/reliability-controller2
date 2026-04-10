@@ -124,10 +124,11 @@ jobs:
     - name: Test Prod
       run: |
         kubectl delete pod curl-test --ignore-not-found -n prod
-        kubectl run curl-test --image=curlimages/curl --restart=Never -n prod -- sleep 5
-        sleep 10
-        kubectl exec -n prod curl-test -- curl -f http://monitor-service:5004/health
+        kubectl run curl-test --image=curlimages/curl --restart=Never -n prod -- sleep 60
+        kubectl wait --for=condition=Ready pod/curl-test -n prod --timeout=30s
+        kubectl exec -n prod curl-test -- \
+          curl -f http://monitor-service:5004/health
         kubectl delete pod curl-test -n prod
-
+        
     - name: Done
       run: echo "🚀 FULL DEPLOYMENT SUCCESS"
