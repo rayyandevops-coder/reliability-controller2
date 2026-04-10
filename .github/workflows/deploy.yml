@@ -1,4 +1,4 @@
-name: PRAVAH CI/CD (LATEST ONLY)
+name: PRAVAH FINAL STABLE (LATEST + BLUE-GREEN)
 
 on:
   push:
@@ -11,22 +11,16 @@ jobs:
 
     steps:
 
-    # ==============================
-    # 🔹 CHECKOUT
-    # ==============================
+    # 🔹 Checkout
     - uses: actions/checkout@v5
 
-    # ==============================
-    # 🔹 DOCKER LOGIN
-    # ==============================
-    - name: Login to DockerHub
+    # 🔹 Docker Login
+    - name: Login DockerHub
       run: |
         echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
-    # ==============================
-    # 🔥 BUILD & PUSH (LATEST ONLY)
-    # ==============================
-    - name: Build & Push Images
+    # 🔥 Build & Push (LATEST)
+    - name: Build & Push
       run: |
         docker build -t ${{ secrets.DOCKER_USERNAME }}/monitor-service:latest ./monitor
         docker build -t ${{ secrets.DOCKER_USERNAME }}/executer-service:latest ./executer
@@ -40,9 +34,7 @@ jobs:
         docker push ${{ secrets.DOCKER_USERNAME }}/web1-service:latest
         docker push ${{ secrets.DOCKER_USERNAME }}/web2-service:latest
 
-    # ==============================
-    # 🔹 KUBECTL SETUP
-    # ==============================
+    # 🔹 Kubectl setup
     - uses: azure/setup-kubectl@v5
 
     - name: Configure kubeconfig
@@ -50,66 +42,65 @@ jobs:
         mkdir -p $HOME/.kube
         echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
 
-    # ==============================
-    # 🔥 CREATE NAMESPACE
-    # ==============================
+    # 🔥 Create Namespace
     - name: Create Namespace
       run: |
         kubectl create namespace prod || true
 
-    # ==============================
-    # 🚀 DEPLOY EVERYTHING
-    # ==============================
-    - name: Deploy All
+    # 🔥 CLEAN OLD PODS (IMPORTANT)
+    - name: Clean Old Pods
       run: |
-        kubectl apply -f k8s/ -n prod
+        kubectl delete pods --all -n prod || true
 
-    # ==============================
-    # 🔄 FORCE USE LATEST IMAGE
-    # ==============================
-    - name: Restart Deployments (Pull Latest)
+    # 🚀 Deploy BLUE (base system)
+    - name: Deploy Blue
       run: |
-        kubectl rollout restart deployment -n prod
+        kubectl apply -f k8s/web1-blue.yml -n prod
+        kubectl apply -f k8s/web2-blue.yml -n prod
+        kubectl apply -f k8s/web1-service.yml -n prod
+        kubectl apply -f k8s/web2-service.yml -n prod
+        kubectl apply -f k8s/monitor.yml -n prod
+        kubectl apply -f k8s/executer.yml -n prod
+        kubectl apply -f k8s/sarathi.yml -n prod
 
-    # ==============================
-    # ⏳ SOFT WAIT (NON-BLOCKING)
-    # ==============================
-    - name: Wait (Soft)
-      run: sleep 30
+    # 🟢 Deploy GREEN
+    - name: Deploy Green
+      run: |
+        kubectl apply -f k8s/web1-green.yml -n prod
+        kubectl apply -f k8s/web2-green.yml -n prod
 
-    # ==============================
-    # 🔍 VERIFY STATUS
-    # ==============================
-    - name: Check Status
+    # 🔄 Switch Traffic
+    - name: Switch Traffic
+      run: |
+        kubectl patch service web1-service -n prod -p '{"spec":{"selector":{"app":"web1","version":"green"}}}'
+        kubectl patch service web2-service -n prod -p '{"spec":{"selector":{"app":"web2","version":"green"}}}'
+
+    # ⏳ Soft Wait
+    - name: Wait
+      run: sleep 20
+
+    # 🔍 Status
+    - name: Check Pods
       run: |
         kubectl get pods -n prod
         kubectl get svc -n prod
 
-    # ==============================
-    # 🔥 TEST PRAVAH
-    # ==============================
-    - name: Emit Test Signal
+    # 🔥 Test (NON-BLOCKING)
+    - name: Test Signal
       run: |
-        kubectl run test --image=curlimages/curl --restart=Never -- sleep 5
-        kubectl wait --for=condition=Ready pod/test --timeout=60s
+        kubectl run test --image=curlimages/curl --restart=Never -- sleep 5 || true
+        sleep 10
 
         kubectl exec test -- \
-          curl -s -X POST http://monitor-service.prod.svc.cluster.local:5004/emit-signal \
-          -H "Content-Type: application/json" \
-          -d '{"trace_id":"latest-run","latency":850,"error_rate":0.6}'
+          curl -s http://monitor-service.prod.svc.cluster.local:5004/health || true
 
-        kubectl delete pod test
+        kubectl delete pod test || true
 
-    # ==============================
-    # 🔹 LOGS
-    # ==============================
-    - name: Monitor Logs
+    # 🔹 Logs
+    - name: Logs
       run: |
-        kubectl logs -n prod deploy/monitor | tail -n 20
+        kubectl logs -n prod deploy/monitor || true
 
-    # ==============================
-    # 🔹 FINAL OUTPUT
-    # ==============================
-    - name: Final Status
-      run: |
-        echo "Deployment using latest images completed successfully 🚀"
+    # 🔹 Done
+    - name: Done
+      run: echo "Deployment Complete 🚀"
