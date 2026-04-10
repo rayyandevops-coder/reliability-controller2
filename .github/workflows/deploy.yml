@@ -62,9 +62,11 @@ jobs:
     - name: Test Staging
       run: |
         kubectl delete pod curl-test --ignore-not-found -n staging
-        kubectl run curl-test --image=curlimages/curl --restart=Never -n staging -- sleep 5
-        sleep 10
-        kubectl exec -n staging curl-test -- curl -f http://monitor-staging-service:5004/health
+        kubectl run curl-test --image=curlimages/curl --restart=Never -n staging -- sleep 60
+        kubectl wait --for=condition=Ready pod/curl-test -n staging --timeout=30s
+         
+        kubectl exec -n staging curl-test -- \
+           curl -f http://monitor-staging-service:5004/health
         kubectl delete pod curl-test -n staging
 
     # =========================
