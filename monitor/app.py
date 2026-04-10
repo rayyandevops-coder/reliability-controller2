@@ -1,108 +1,48 @@
-# monitor/app.py — FINAL PRAVAH (TANTRA COMPLIANT)
-
 from flask import Flask, request, jsonify
-import time
 import random
+
+from signal_builder import build_signal
+from sources.infra import generate_infra_signals
+from sources.cicd import generate_cicd_signals
+from sources.app_metrics import generate_app_signals
+from deployment_status import get_deployment_status
 
 app = Flask(__name__)
 
-# ─────────────────────────────────────────────
-# SIGNAL GENERATOR
-# ─────────────────────────────────────────────
-def generate_signal(trace_id, signal_type, severity, metrics, recommended_action):
-    return {
-        "trace_id": trace_id,
-        "signal_type": signal_type,
-        "severity": severity,
-        "source": "pravah",
-        "metrics": metrics,
-        "recommended_action": recommended_action,
-        "timestamp": int(time.time())
-    }
 
-# ─────────────────────────────────────────────
-# METRICS ENGINE (DETECT + MEASURE ONLY)
-# ─────────────────────────────────────────────
 @app.route("/metrics")
 def metrics():
-    latency = random.randint(100, 900)
-    error_rate = round(random.uniform(0, 1), 2)
-    pod_health = "healthy" if latency < 700 else "degraded"
+    return jsonify({
+        "latency": random.randint(100, 900),
+        "error_rate": round(random.uniform(0, 1), 2)
+    })
 
-    data = {
-        "latency": latency,
-        "error_rate": error_rate,
-        "pod_health": pod_health
-    }
 
-    print({
-        "event": "METRICS_COLLECTED",
-        "trace_id": "N/A",
-        "metrics": data
-    }, flush=True)
-
-    return jsonify(data)
-
-# ─────────────────────────────────────────────
-# SIGNAL EMISSION (NO EXECUTION)
-# ─────────────────────────────────────────────
 @app.route("/emit-signal", methods=["POST"])
 def emit_signal():
     data = request.get_json()
 
-    trace_id = data.get("trace_id")
+    trace_id = data.get("trace_id", None)
     latency = data.get("latency", 0)
     error_rate = data.get("error_rate", 0)
-    deployment_status = data.get("deployment_status", "success")
 
-    # 🔥 DETERMINISTIC SIGNAL LOGIC
-    if deployment_status == "failed":
-        signal_type = "deployment_failure"
-        severity = "HIGH"
-        recommended_action = "rollback"
+    # ✅ CI/CD real source
+    deployment_data = get_deployment_status()
+    deployment_status = deployment_data["status"]
 
-    elif latency > 700:
-        signal_type = "latency_spike"
-        severity = "HIGH"
-        recommended_action = "scale"
+    raw_signals = []
 
-    elif error_rate > 0.5:
-        signal_type = "health_degradation"
-        severity = "MEDIUM"
-        recommended_action = "restart"
+    raw_signals += generate_app_signals(trace_id, latency, error_rate)
+    raw_signals += generate_cicd_signals(trace_id, deployment_status)
+    raw_signals += generate_infra_signals(trace_id, latency)
 
-    else:
-        signal_type = "anomaly_detected"
-        severity = "LOW"
-        recommended_action = "observe"
+    final_signals = [
+        build_signal(st, svc, metric, val, trace_id)
+        for (st, svc, metric, val) in raw_signals
+    ]
 
-    signal = generate_signal(
-        trace_id,
-        signal_type,
-        severity,
-        {
-            "latency": latency,
-            "error_rate": error_rate,
-            "deployment_status": deployment_status
-        },
-        recommended_action
-    )
+    return jsonify(final_signals)
 
-    print({
-        "event": "SIGNAL_EMITTED",
-        "trace_id": trace_id,
-        "signal": signal
-    }, flush=True)
-
-    # ALERT (ONLY LOG — NO ACTION)
-    if severity == "HIGH":
-        print({
-            "event": "ALERT",
-            "trace_id": trace_id,
-            "signal_type": signal_type
-        }, flush=True)
-
-    return jsonify(signal)
 
 @app.route("/health")
 def health():
