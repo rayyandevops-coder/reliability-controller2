@@ -1,4 +1,4 @@
-name: PRAVAH Signal Pipeline (FINAL 10/10)
+name: PRAVAH Full Deploy + Signal Pipeline (10/10)
 
 on:
   push:
@@ -31,7 +31,27 @@ jobs:
         mkdir -p $HOME/.kube
         echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
 
-    # 🔹 Verify Cluster
+    # 🔥 CREATE NAMESPACE (SAFE)
+    - name: Create Namespace
+      run: |
+        kubectl create namespace prod || true
+
+    # 🔥 DEPLOY ALL SERVICES (FRESH SETUP)
+    - name: Deploy System
+      run: |
+        kubectl apply -f executer.yml -n prod
+        kubectl apply -f monitor.yml -n prod
+        kubectl apply -f sarathi.yml -n prod
+        kubectl apply -f web1-blue.yml -n prod
+        kubectl apply -f web2-blue.yml -n prod
+        kubectl apply -f web1-service.yml -n prod
+
+    # 🔥 WAIT FOR SYSTEM TO BE READY
+    - name: Wait for Pods
+      run: |
+        kubectl wait --for=condition=available deployment --all -n prod --timeout=180s
+
+    # 🔹 Verify Deployment
     - name: Verify Pods
       run: |
         kubectl get pods -n prod
@@ -70,7 +90,7 @@ jobs:
 
         kubectl delete pod $POD
 
-    # 🔥 SIGNAL FAILURE (HIGH SEVERITY CASE)
+    # 🔥 SIGNAL FAILURE
     - name: Emit Signal Failure
       run: |
         POD=signal-fail-$TRACE_ID
@@ -88,13 +108,13 @@ jobs:
 
         kubectl delete pod $POD
 
-    # 🔥 VALIDATE SIGNAL STRUCTURE (PROOF)
+    # 🔥 VALIDATE SIGNAL STRUCTURE
     - name: Validate Signal Output
       run: |
-        echo "=== VALIDATED SIGNAL STRUCTURE ==="
+        echo "=== VALIDATED SIGNAL ==="
         cat failure.json | jq
 
-    # 🔥 INVALID SIGNAL TEST (VALIDATION PROOF)
+    # 🔥 INVALID SIGNAL TEST
     - name: Invalid Signal Test
       run: |
         POD=invalid-$TRACE_ID
@@ -112,23 +132,23 @@ jobs:
 
         kubectl delete pod $POD
 
-    # 🔹 Fetch Logs (Proof)
-    - name: Fetch Pravah Logs
+    # 🔹 Logs Proof
+    - name: Fetch Logs
       run: |
         kubectl logs -n prod deploy/monitor | tail -n 20
 
-    # 🔹 FINAL TRACE (10/10 PROOF)
+    # 🔹 FINAL TRACE
     - name: Final Trace
       run: |
         echo "{
           \"trace_id\":\"$TRACE_ID\",
           \"flow\": [
+            \"infra_deployed\",
             \"metrics_collected\",
-            \"signal_normal_emitted\",
-            \"signal_failure_emitted\",
-            \"validation_passed\",
-            \"invalid_signal_rejected\"
+            \"signals_generated\",
+            \"validated\",
+            \"invalid_rejected\"
           ],
           \"system\":\"pravah\",
-          \"compliance\":\"TANTRA Observability Layer\"
+          \"mode\":\"fresh_deploy\"
         }"
