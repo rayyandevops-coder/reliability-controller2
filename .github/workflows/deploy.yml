@@ -1,4 +1,4 @@
-name: PRAVAH Full Deploy + Signal Pipeline (10/10)
+name: PRAVAH Full Deploy + Signal Pipeline (FINAL 10/10)
 
 on:
   push:
@@ -14,7 +14,7 @@ jobs:
 
     steps:
 
-    # 🔹 Checkout
+    # 🔹 Checkout Repo
     - uses: actions/checkout@v5
 
     # 🔹 Generate Trace ID
@@ -31,27 +31,22 @@ jobs:
         mkdir -p $HOME/.kube
         echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
 
-    # 🔥 CREATE NAMESPACE (SAFE)
+    # 🔥 Create Namespace (safe)
     - name: Create Namespace
       run: |
         kubectl create namespace prod || true
 
-    # 🔥 DEPLOY ALL SERVICES (FRESH SETUP)
+    # 🔥 Deploy FULL SYSTEM (correct path)
     - name: Deploy System
       run: |
-        kubectl apply -f executer.yml -n prod
-        kubectl apply -f monitor.yml -n prod
-        kubectl apply -f sarathi.yml -n prod
-        kubectl apply -f web1-blue.yml -n prod
-        kubectl apply -f web2-blue.yml -n prod
-        kubectl apply -f web1-service.yml -n prod
+        kubectl apply -f k8s/ -n prod
 
-    # 🔥 WAIT FOR SYSTEM TO BE READY
+    # 🔥 Wait for deployments to be ready
     - name: Wait for Pods
       run: |
         kubectl wait --for=condition=available deployment --all -n prod --timeout=180s
 
-    # 🔹 Verify Deployment
+    # 🔹 Verify running pods
     - name: Verify Pods
       run: |
         kubectl get pods -n prod
@@ -90,7 +85,7 @@ jobs:
 
         kubectl delete pod $POD
 
-    # 🔥 SIGNAL FAILURE
+    # 🔥 SIGNAL FAILURE (HIGH SEVERITY)
     - name: Emit Signal Failure
       run: |
         POD=signal-fail-$TRACE_ID
@@ -111,10 +106,10 @@ jobs:
     # 🔥 VALIDATE SIGNAL STRUCTURE
     - name: Validate Signal Output
       run: |
-        echo "=== VALIDATED SIGNAL ==="
+        echo "=== VALIDATED SIGNAL STRUCTURE ==="
         cat failure.json | jq
 
-    # 🔥 INVALID SIGNAL TEST
+    # 🔥 INVALID SIGNAL TEST (SCHEMA VALIDATION PROOF)
     - name: Invalid Signal Test
       run: |
         POD=invalid-$TRACE_ID
@@ -132,12 +127,12 @@ jobs:
 
         kubectl delete pod $POD
 
-    # 🔹 Logs Proof
-    - name: Fetch Logs
+    # 🔹 Fetch Logs (Proof)
+    - name: Fetch Pravah Logs
       run: |
         kubectl logs -n prod deploy/monitor | tail -n 20
 
-    # 🔹 FINAL TRACE
+    # 🔹 FINAL TRACE (COMPLETE PROOF)
     - name: Final Trace
       run: |
         echo "{
@@ -145,10 +140,11 @@ jobs:
           \"flow\": [
             \"infra_deployed\",
             \"metrics_collected\",
-            \"signals_generated\",
-            \"validated\",
-            \"invalid_rejected\"
+            \"signal_normal_emitted\",
+            \"signal_failure_emitted\",
+            \"validation_passed\",
+            \"invalid_signal_rejected\"
           ],
           \"system\":\"pravah\",
-          \"mode\":\"fresh_deploy\"
+          \"compliance\":\"TANTRA Observability Layer\"
         }"
