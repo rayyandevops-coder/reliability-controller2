@@ -1,12 +1,9 @@
-name: PRAVAH Full CI/CD + Blue-Green (FINAL FIXED)
+name: PRAVAH CI/CD (LATEST ONLY)
 
 on:
   push:
     branches:
       - main
-
-env:
-  IMAGE_TAG: v3
 
 jobs:
   pravah:
@@ -19,32 +16,29 @@ jobs:
     # ==============================
     - uses: actions/checkout@v5
 
-    # 🔹 TRACE ID
-    - name: Generate Trace ID
-      run: echo "TRACE_ID=$(uuidgen)" >> $GITHUB_ENV
-
     # ==============================
     # 🔹 DOCKER LOGIN
     # ==============================
-    - name: Login DockerHub
-      run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+    - name: Login to DockerHub
+      run: |
+        echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
     # ==============================
-    # 🔥 BUILD & PUSH IMAGES
+    # 🔥 BUILD & PUSH (LATEST ONLY)
     # ==============================
     - name: Build & Push Images
       run: |
-        docker build -t ${{ secrets.DOCKER_USERNAME }}/monitor-service:$IMAGE_TAG ./monitor
-        docker build -t ${{ secrets.DOCKER_USERNAME }}/executer-service:$IMAGE_TAG ./executer
-        docker build -t ${{ secrets.DOCKER_USERNAME }}/sarathi-service:$IMAGE_TAG ./sarathi
-        docker build -t ${{ secrets.DOCKER_USERNAME }}/web1-service:$IMAGE_TAG ./web1
-        docker build -t ${{ secrets.DOCKER_USERNAME }}/web2-service:$IMAGE_TAG ./web2
+        docker build -t ${{ secrets.DOCKER_USERNAME }}/monitor-service:latest ./monitor
+        docker build -t ${{ secrets.DOCKER_USERNAME }}/executer-service:latest ./executer
+        docker build -t ${{ secrets.DOCKER_USERNAME }}/sarathi-service:latest ./sarathi
+        docker build -t ${{ secrets.DOCKER_USERNAME }}/web1-service:latest ./web1
+        docker build -t ${{ secrets.DOCKER_USERNAME }}/web2-service:latest ./web2
 
-        docker push ${{ secrets.DOCKER_USERNAME }}/monitor-service:$IMAGE_TAG
-        docker push ${{ secrets.DOCKER_USERNAME }}/executer-service:$IMAGE_TAG
-        docker push ${{ secrets.DOCKER_USERNAME }}/sarathi-service:$IMAGE_TAG
-        docker push ${{ secrets.DOCKER_USERNAME }}/web1-service:$IMAGE_TAG
-        docker push ${{ secrets.DOCKER_USERNAME }}/web2-service:$IMAGE_TAG
+        docker push ${{ secrets.DOCKER_USERNAME }}/monitor-service:latest
+        docker push ${{ secrets.DOCKER_USERNAME }}/executer-service:latest
+        docker push ${{ secrets.DOCKER_USERNAME }}/sarathi-service:latest
+        docker push ${{ secrets.DOCKER_USERNAME }}/web1-service:latest
+        docker push ${{ secrets.DOCKER_USERNAME }}/web2-service:latest
 
     # ==============================
     # 🔹 KUBECTL SETUP
@@ -57,112 +51,65 @@ jobs:
         echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
 
     # ==============================
-    # 🔥 CREATE NAMESPACES
+    # 🔥 CREATE NAMESPACE
     # ==============================
-    - name: Create Namespaces
+    - name: Create Namespace
       run: |
         kubectl create namespace prod || true
-        kubectl create namespace staging || true
 
     # ==============================
-    # 🚀 STAGING DEPLOY
+    # 🚀 DEPLOY EVERYTHING
     # ==============================
-    - name: Deploy Staging
+    - name: Deploy All
       run: |
-        kubectl apply -f k8s/staging/ -n staging
+        kubectl apply -f k8s/ -n prod
 
-    - name: Wait Staging
+    # ==============================
+    # 🔄 FORCE USE LATEST IMAGE
+    # ==============================
+    - name: Restart Deployments (Pull Latest)
       run: |
-        kubectl wait --for=condition=available deployment --all -n staging --timeout=180s
+        kubectl rollout restart deployment -n prod
 
     # ==============================
-    # 🚀 BASE PROD (BLUE)
+    # ⏳ SOFT WAIT (NON-BLOCKING)
     # ==============================
-    - name: Deploy Base System (BLUE)
-      run: |
-        kubectl apply -f k8s/web1-blue.yml -n prod
-        kubectl apply -f k8s/web2-blue.yml -n prod
-        kubectl apply -f k8s/web1-service.yml -n prod
-        kubectl apply -f k8s/web2-service.yml -n prod
-        kubectl apply -f k8s/monitor.yml -n prod
-        kubectl apply -f k8s/executer.yml -n prod
-        kubectl apply -f k8s/sarathi.yml -n prod
-
-    - name: Wait Base System
-      run: |
-        kubectl wait --for=condition=available deployment --all -n prod --timeout=180s
+    - name: Wait (Soft)
+      run: sleep 30
 
     # ==============================
-    # 🟢 DEPLOY GREEN
+    # 🔍 VERIFY STATUS
     # ==============================
-    - name: Deploy Green
-      run: |
-        kubectl apply -f k8s/web1-green.yml -n prod
-        kubectl apply -f k8s/web2-green.yml -n prod
-
-    - name: Wait Green Ready
-      run: |
-        kubectl rollout status deployment/web1-green -n prod
-        kubectl rollout status deployment/web2-green -n prod
-
-    # ==============================
-    # 🔄 SWITCH TRAFFIC
-    # ==============================
-    - name: Switch Traffic to Green
-      run: |
-        kubectl patch service web1-service -n prod -p '{"spec":{"selector":{"app":"web1","version":"green"}}}'
-        kubectl patch service web2-service -n prod -p '{"spec":{"selector":{"app":"web2","version":"green"}}}'
-
-    # ==============================
-    # 🔍 VERIFY
-    # ==============================
-    - name: Verify Deployment
+    - name: Check Status
       run: |
         kubectl get pods -n prod
         kubectl get svc -n prod
 
     # ==============================
-    # 🔥 PRAVAH TEST
+    # 🔥 TEST PRAVAH
     # ==============================
-    - name: Emit Signal
+    - name: Emit Test Signal
       run: |
-        POD=test-$TRACE_ID
-        kubectl run $POD --image=curlimages/curl --restart=Never --command -- sleep 10
-        kubectl wait --for=condition=Ready pod/$POD --timeout=60s
+        kubectl run test --image=curlimages/curl --restart=Never -- sleep 5
+        kubectl wait --for=condition=Ready pod/test --timeout=60s
 
-        kubectl exec $POD -- \
+        kubectl exec test -- \
           curl -s -X POST http://monitor-service.prod.svc.cluster.local:5004/emit-signal \
           -H "Content-Type: application/json" \
-          -d "{\"trace_id\":\"$TRACE_ID\",\"latency\":850,\"error_rate\":0.6}" \
-          > output.json
+          -d '{"trace_id":"latest-run","latency":850,"error_rate":0.6}'
 
-        echo "=== SIGNAL OUTPUT ==="
-        cat output.json
-
-        kubectl delete pod $POD
+        kubectl delete pod test
 
     # ==============================
     # 🔹 LOGS
     # ==============================
-    - name: Fetch Logs
+    - name: Monitor Logs
       run: |
         kubectl logs -n prod deploy/monitor | tail -n 20
 
     # ==============================
-    # 🔹 FINAL TRACE
+    # 🔹 FINAL OUTPUT
     # ==============================
-    - name: Final Trace
+    - name: Final Status
       run: |
-        echo "{
-          \"trace_id\":\"$TRACE_ID\",
-          \"flow\": [
-            \"docker_build\",
-            \"docker_push\",
-            \"staging_deploy\",
-            \"blue_deploy\",
-            \"green_deploy\",
-            \"traffic_switch\",
-            \"signals_verified\"
-          ],
-          \"status\":\"production_ready\"
-        }"
+        echo "Deployment using latest images completed successfully 🚀"

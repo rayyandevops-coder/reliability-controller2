@@ -45,7 +45,7 @@ services:
           - executer-service
 
   monitor:
-    image: rayyandevopss/monitor-service:v1
+    image: rayyandevopss/monitor-service:v4
     ports:
       - "5004:5004"
     environment:
