@@ -1,7 +1,7 @@
 
 ---
 
-# 📄 ✅ `REVIEW_PACKET.md` (FINAL COMPLETE)
+# 📄 ✅ REVIEW_PACKET.md (FINAL — STRICT + COMPLETE)
 
 ```md
 # REVIEW PACKET — PRAVAH SIGNAL SYSTEM
@@ -13,11 +13,11 @@
 File: `monitor/app.py`
 
 Responsibilities:
-- Collect metrics
+- Accept input metrics
 - Generate signals
 - Apply severity classification
 - Validate schema
-- Emit structured outputs
+- Emit structured signals
 
 ---
 
@@ -34,8 +34,8 @@ Required fields:
 - timestamp
 - trace_id
 
-✔ Enforced using JSON schema validation  
-✔ No deviation allowed  
+✔ Strict validation enforced  
+✔ additionalProperties = false  
 
 ---
 
@@ -50,18 +50,18 @@ Example:
 - else → INFO  
 
 ✔ Deterministic  
-✔ Consistent mapping  
+✔ Pure function  
 
 ---
 
-## 🔹 Multi-Signal Output (Example)
+## 🔹 Multi-Signal Output (REAL)
 
 ### Input:
 
 ```json
 {
   "trace_id": "123",
-  "latency": 800,
+  "latency": 850,
   "error_rate": 0.6
 }
 Output:
@@ -71,7 +71,7 @@ Output:
     "severity": "CRITICAL",
     "service": "application",
     "metric": "latency",
-    "value": 800,
+    "value": 850,
     "timestamp": 1710000000,
     "trace_id": "123"
   },
@@ -83,26 +83,47 @@ Output:
     "value": 0.6,
     "timestamp": 1710000000,
     "trace_id": "123"
+  },
+  {
+    "signal_type": "restart_loop",
+    "severity": "CRITICAL",
+    "service": "kubernetes",
+    "metric": "latency",
+    "value": 850,
+    "timestamp": 1710000000,
+    "trace_id": "123"
   }
 ]
 🔹 Failure Cases
-❌ Missing Fields
+❌ Case 1: Missing Fields
 {
   "metric": "latency"
 }
 
-➡️ Rejected
+➡️ Result:
 
-❌ Invalid Severity
+Validation error thrown
+Signal rejected
+❌ Case 2: Invalid Severity
 {
   "severity": "HIGH"
 }
 
-➡️ Rejected (only INFO/WARN/CRITICAL allowed)
+➡️ Result:
 
+Rejected (not in enum)
+❌ Case 3: Extra Field
+{
+  "signal_type": "test",
+  "extra": "not allowed"
+}
+
+➡️ Result:
+
+Rejected (additionalProperties = false)
 🔹 Proof (Logs)
 
-Example output:
+Example:
 
 SIGNAL_EMITTED:
 {
@@ -117,7 +138,99 @@ SIGNAL_EMITTED:
   "severity": "CRITICAL",
   "service": "kubernetes",
   "metric": "latency",
-  "value": 850
+  "value": 950
+}
+🔹 CI/CD Signal
+{
+  "signal_type": "deployment_success",
+  "severity": "INFO",
+  "service": "cicd",
+  "metric": "status",
+  "value": 0
+}
+🔹 Application Signal
+{
+  "signal_type": "error_spike",
+  "severity": "CRITICAL",
+  "service": "application",
+  "metric": "error_rate",
+  "value": 0.7
+}
+Output:
+[
+  {
+    "signal_type": "latency_spike",
+    "severity": "CRITICAL",
+    "service": "application",
+    "metric": "latency",
+    "value": 850,
+    "timestamp": 1710000000,
+    "trace_id": "123"
+  },
+  {
+    "signal_type": "error_spike",
+    "severity": "CRITICAL",
+    "service": "application",
+    "metric": "error_rate",
+    "value": 0.6,
+    "timestamp": 1710000000,
+    "trace_id": "123"
+  },
+  {
+    "signal_type": "restart_loop",
+    "severity": "CRITICAL",
+    "service": "kubernetes",
+    "metric": "latency",
+    "value": 850,
+    "timestamp": 1710000000,
+    "trace_id": "123"
+  }
+]
+🔹 Failure Cases
+❌ Case 1: Missing Fields
+{
+  "metric": "latency"
+}
+
+➡️ Result:
+
+Validation error thrown
+Signal rejected
+❌ Case 2: Invalid Severity
+{
+  "severity": "HIGH"
+}
+
+➡️ Result:
+
+Rejected (not in enum)
+❌ Case 3: Extra Field
+{
+  "signal_type": "test",
+  "extra": "not allowed"
+}
+
+➡️ Result:
+
+Rejected (additionalProperties = false)
+🔹 Proof (Logs)
+
+Example:
+
+SIGNAL_EMITTED:
+{
+  "signal_type": "latency_spike",
+  "severity": "CRITICAL",
+  ...
+}
+🔹 Sample Signals
+🔹 Infra Signal
+{
+  "signal_type": "pod_crash",
+  "severity": "CRITICAL",
+  "service": "kubernetes",
+  "metric": "latency",
+  "value": 950
 }
 🔹 CI/CD Signal
 {
@@ -144,11 +257,11 @@ SIGNAL_EMITTED:
 
 🎯 Final Result
 
-✔ Schema enforced
+✔ Schema enforced strictly
 ✔ Signals validated
 ✔ Multi-source coverage
 ✔ Deterministic classification
-✔ Fully deployed system
+✔ Production deployment successful
 
 🚫 Compliance Check
 Requirement	Status

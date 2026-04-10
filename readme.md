@@ -4,7 +4,7 @@
 
 ## 🚀 Overview
 
-PRAVAH is a **canonical signal generation system** that standardizes how distributed systems communicate **health and state**.
+PRAVAH is a **canonical signal language system** designed to standardize how distributed systems communicate **health and state**.
 
 It is NOT a monitoring tool.
 
@@ -12,110 +12,94 @@ It generates:
 - Deterministic signals
 - Structured outputs
 - Schema-validated data
-- Severity-classified metrics
-
-This system serves as the **foundation layer** for:
-- Sarathi (Decision Layer)
-- InsightFlow (Signal Processing Layer)
+- Severity-aware metrics
 
 ---
 
-## 🧠 System Architecture
+## 🧠 Objective
 
-
-Infra / CI-CD / Application
-↓
-PRAVAH
-(Signal Generator)
-↓
-Structured Signals
-↓
-Consumers
-(Sarathi / Future Systems)
-
+- Define a **unified signal format**
+- Ensure **strict validation**
+- Provide **reliable inputs** to decision systems (Sarathi)
+- Enable future processing (InsightFlow)
 
 ---
 
-## ⚙️ Core Features
-
-### ✅ 1. Strict Signal Schema
+## ⚙️ Signal Schema (STRICT)
 
 Defined in: `signal_schema.json`
 
-All signals follow this structure:
-
 ```json
 {
-  "signal_type": "",
-  "severity": "",
-  "service": "",
-  "metric": "",
-  "value": "",
-  "timestamp": "",
-  "trace_id": ""
+  "type": "object",
+  "required": [
+    "signal_type",
+    "severity",
+    "service",
+    "metric",
+    "value",
+    "timestamp",
+    "trace_id"
+  ],
+  "properties": {
+    "signal_type": { "type": "string" },
+    "severity": {
+      "type": "string",
+      "enum": ["INFO", "WARN", "CRITICAL"]
+    },
+    "service": { "type": "string" },
+    "metric": { "type": "string" },
+    "value": {},
+    "timestamp": { "type": "integer" },
+    "trace_id": {
+      "type": ["string", "null"]
+    }
+  },
+  "additionalProperties": false
 }
-
-✔ Enforced strictly
-✔ No deviation allowed
-
+⚙️ Core Features
+✅ 1. Strict Schema Enforcement
+All signals validated using JSON Schema
+Rejects invalid structure
+No extra fields allowed
 ✅ 2. Deterministic Severity Engine
 
-Implemented in: severity_engine.py
+Implemented in severity_engine.py
 
 Metric	CRITICAL	WARN	INFO
 CPU	>85	>60	≤60
 Memory	>80	>60	≤60
 Latency	>700	>400	≤400
 Error Rate	>0.5	>0.2	≤0.2
-
-✔ Pure function
-✔ No randomness
-
-✅ 3. Schema Validation Layer
-
-Implemented in: validator.py
-
-✔ Validates all signals
-✔ Rejects:
-
+✅ 3. Validation Layer (Strict)
+Implemented in validator.py
+Uses JSON schema validation
+Rejects:
 Missing fields
 Invalid types
-Incorrect structure
-
-✔ Uses JSON Schema
-
+Extra fields
 ✅ 4. Multi-Source Signal Generation
-
-Signals generated from:
-
-🔹 Application
+🔹 Application Signals
 latency_spike
 error_spike
-🔹 CI/CD
+🔹 CI/CD Signals
 deployment_success
 deployment_failure
-🔹 Infrastructure
+🔹 Infrastructure Signals
 pod_crash
 restart_loop
+scaling_event
 ✅ 5. Trace Continuity
-trace_id is preserved across:
-signal generation
-logs
-pipeline
-
-✔ If unavailable → explicitly null
-✔ No fake generation
-
-✅ 6. Standardized Output
-
-All signals follow strict format:
-
+trace_id is preserved across system
+If missing → explicitly null
+No artificial generation
+✅ 6. Standard Output Format
 {
   "signal_type": "latency_spike",
   "severity": "CRITICAL",
   "service": "application",
   "metric": "latency",
-  "value": 800,
+  "value": 850,
   "timestamp": 1710000000,
   "trace_id": "123"
 }
@@ -127,7 +111,7 @@ GET /metrics
 🔹 Emit Signals
 POST /emit-signal
 🚀 Deployment
-✅ CI/CD Pipeline
+✅ CI/CD
 GitHub Actions
 Docker build & push
 Kubernetes deployment
@@ -136,32 +120,26 @@ Environment	Namespace
 Staging	staging
 Production	prod
 🔵 Blue-Green Deployment
-Blue → current version
+Blue → active version
 Green → new version
-Traffic switched using Kubernetes service
+Traffic switched using Kubernetes services
 🌐 External Access
 Service	URL
-Web1	http://54.156.236.10:30001
-Web2	http://54.156.236.10:30002
-Monitor	http://54.156.236.10:30004/metrics
-🛠️ Tech Stack
-Python (Flask)
-Docker
-Kubernetes
-GitHub Actions
-JSON Schema
+Web1	http://<NODE-IP>:30001
+Web2	http://<NODE-IP>:30002
+Monitor	http://<NODE-IP>:30004/metrics
 🎯 Outcome
 
-✔ Deterministic signal system
-✔ Structured communication layer
-✔ Validated outputs
+✔ Strict schema validation
+✔ Deterministic signal generation
+✔ Multi-source coverage
 ✔ Production-ready deployment
 ✔ TANTRA compliant
 
-🚫 Constraints (Strictly Followed)
+🚫 Constraints Followed
 ❌ No execution logic
 ❌ No decision-making
-❌ No recommendations
+❌ No recommended actions
 ❌ No system triggering
 👨‍💻 Author
 

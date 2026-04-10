@@ -14,6 +14,7 @@ def build_signal(signal_type, service, metric, value, trace_id):
         "trace_id": trace_id if trace_id else None
     }
 
+    # 🔥 STRICT VALIDATION (WILL FAIL IF INVALID)
     validate_signal(signal)
 
     print({
