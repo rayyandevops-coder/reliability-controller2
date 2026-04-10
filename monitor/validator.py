@@ -1,6 +1,6 @@
 import json
 import os
-from jsonschema import validate
+from jsonschema import validate, ValidationError
 
 BASE_DIR = os.path.dirname(__file__)
 SCHEMA_PATH = os.path.join(BASE_DIR, "signal_schema.json")
@@ -10,5 +10,9 @@ with open(SCHEMA_PATH) as f:
 
 
 def validate_signal(signal):
-    validate(instance=signal, schema=SCHEMA)
-    return True
+    try:
+        validate(instance=signal, schema=SCHEMA)
+        return True
+    except ValidationError as e:
+        print("Validation Error:", e)
+        return False
