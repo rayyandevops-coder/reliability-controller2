@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
       - name: monitor
-        image: rayyandevopss/monitor-service:v3
+        image: rayyandevopss/monitor-service:v4
         imagePullPolicy: Always
 
         ports:
