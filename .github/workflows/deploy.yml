@@ -1,4 +1,4 @@
-name: PRAVAH FINAL STABLE (LATEST + BLUE-GREEN)
+name: PRAVAH FINAL STABLE (FINAL)
 
 on:
   push:
@@ -10,16 +10,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
-    # 🔹 Checkout
     - uses: actions/checkout@v5
 
-    # 🔹 Docker Login
+    # 🔐 Docker Login
     - name: Login DockerHub
       run: |
         echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
-    # 🔥 Build & Push (LATEST)
+    # 🐳 Build & Push
     - name: Build & Push
       run: |
         docker build -t ${{ secrets.DOCKER_USERNAME }}/monitor-service:latest ./monitor
@@ -34,7 +32,7 @@ jobs:
         docker push ${{ secrets.DOCKER_USERNAME }}/web1-service:latest
         docker push ${{ secrets.DOCKER_USERNAME }}/web2-service:latest
 
-    # 🔹 Kubectl setup
+    # 🔧 Kubectl
     - uses: azure/setup-kubectl@v5
 
     - name: Configure kubeconfig
@@ -42,65 +40,91 @@ jobs:
         mkdir -p $HOME/.kube
         echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
 
-    # 🔥 Create Namespace
+    # 📦 Namespace FIRST (FIXED)
     - name: Create Namespace
-      run: |
-        kubectl create namespace prod || true
+      run: kubectl create namespace prod || true
 
-    # 🔥 CLEAN OLD PODS (IMPORTANT)
-    - name: Clean Old Pods
+    # 🔶 STAGING DEPLOY
+    - name: Deploy Staging
       run: |
-        kubectl delete pods --all -n prod || true
+        kubectl apply -f k8s/staging/ -n prod
 
-    # 🚀 Deploy BLUE (base system)
+    # ⏳ WAIT STAGING (STRICT)
+    - name: Wait Staging
+      run: |
+        kubectl rollout status deployment/sarathi-staging -n prod --timeout=60s
+        kubectl rollout status deployment/executer-staging -n prod --timeout=60s
+        kubectl rollout status deployment/monitor-staging -n prod --timeout=60s
+
+    # 🧪 STAGING TEST (VERY IMPORTANT)
+    - name: Test Staging
+      run: |
+        kubectl delete pod curl-test --ignore-not-found -n prod
+
+        kubectl run curl-test --image=curlimages/curl --restart=Never -n prod -- sleep 5
+        sleep 10
+
+        kubectl exec -n prod curl-test -- \
+          curl -f http://monitor-staging-service:5004/health
+
+        kubectl delete pod curl-test -n prod
+
+    # 🚀 DEPLOY CORE
+    - name: Deploy Core
+      run: |
+        kubectl apply -f k8s/sarathi.yml -n prod
+        kubectl apply -f k8s/executer.yml -n prod
+        kubectl apply -f k8s/monitor.yml -n prod
+
+    # ⏳ WAIT CORE
+    - name: Wait Core
+      run: |
+        kubectl rollout status deployment/sarathi -n prod --timeout=60s
+        kubectl rollout status deployment/executer -n prod --timeout=60s
+        kubectl rollout status deployment/monitor -n prod --timeout=60s
+
+    # 🔵 BLUE
     - name: Deploy Blue
       run: |
         kubectl apply -f k8s/web1-blue.yml -n prod
         kubectl apply -f k8s/web2-blue.yml -n prod
         kubectl apply -f k8s/web1-service.yml -n prod
         kubectl apply -f k8s/web2-service.yml -n prod
-        kubectl apply -f k8s/monitor.yml -n prod
-        kubectl apply -f k8s/executer.yml -n prod
-        kubectl apply -f k8s/sarathi.yml -n prod
 
-    # 🟢 Deploy GREEN
+    # 🟢 GREEN
     - name: Deploy Green
       run: |
         kubectl apply -f k8s/web1-green.yml -n prod
         kubectl apply -f k8s/web2-green.yml -n prod
 
-    # 🔄 Switch Traffic
+    # 🔄 SWITCH TRAFFIC
     - name: Switch Traffic
       run: |
         kubectl patch service web1-service -n prod -p '{"spec":{"selector":{"app":"web1","version":"green"}}}'
         kubectl patch service web2-service -n prod -p '{"spec":{"selector":{"app":"web2","version":"green"}}}'
 
-    # ⏳ Soft Wait
+    # ⏳ WAIT
     - name: Wait
-      run: sleep 20
+      run: sleep 30
 
-    # 🔍 Status
-    - name: Check Pods
+    # 🔍 STATUS
+    - name: Status
       run: |
         kubectl get pods -n prod
         kubectl get svc -n prod
 
-    # 🔥 Test (NON-BLOCKING)
-    - name: Test Signal
+    # 🧪 FINAL TEST
+    - name: Test Prod
       run: |
-        kubectl run test --image=curlimages/curl --restart=Never -- sleep 5 || true
+        kubectl delete pod curl-test --ignore-not-found -n prod
+
+        kubectl run curl-test --image=curlimages/curl --restart=Never -n prod -- sleep 5
         sleep 10
 
-        kubectl exec test -- \
-          curl -s http://monitor-service.prod.svc.cluster.local:5004/health || true
+        kubectl exec -n prod curl-test -- \
+          curl -f http://monitor-service:5004/health
 
-        kubectl delete pod test || true
+        kubectl delete pod curl-test -n prod
 
-    # 🔹 Logs
-    - name: Logs
-      run: |
-        kubectl logs -n prod deploy/monitor || true
-
-    # 🔹 Done
     - name: Done
-      run: echo "Deployment Complete 🚀"
+      run: echo "✅ FULL PIPELINE SUCCESS"

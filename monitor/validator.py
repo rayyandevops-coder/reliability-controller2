@@ -5,9 +5,12 @@ from jsonschema import validate, ValidationError
 BASE_DIR = os.path.dirname(__file__)
 SCHEMA_PATH = os.path.join(BASE_DIR, "signal_schema.json")
 
-with open(SCHEMA_PATH) as f:
-    SCHEMA = json.load(f)
-
+try:
+    with open(SCHEMA_PATH) as f:
+        SCHEMA = json.load(f)
+except Exception as e:
+    print("Schema load failed:", e)
+    SCHEMA = {}
 
 def validate_signal(signal):
     try:
