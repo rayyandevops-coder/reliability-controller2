@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: web2
-        image: rayyandevopss/web2-service:latest
+        image: rayyandevopss/web1-service:latest
         imagePullPolicy: Always
 
         ports:
