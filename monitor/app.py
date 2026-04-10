@@ -26,7 +26,7 @@ def emit_signal():
     latency = data.get("latency", 0)
     error_rate = data.get("error_rate", 0)
 
-    # ✅ CI/CD real source
+    # CI/CD source
     deployment_data = get_deployment_status()
     deployment_status = deployment_data["status"]
 
@@ -47,3 +47,7 @@ def emit_signal():
 @app.route("/health")
 def health():
     return jsonify({"status": "pravah_running"})
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5004)

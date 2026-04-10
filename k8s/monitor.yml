@@ -62,9 +62,10 @@ kind: Service
 metadata:
   name: monitor-service
 spec:
-  type: NodePort
+  type: NodePort   # 🔥 IMPORTANT
   selector:
     app: monitor
   ports:
     - port: 5004
       targetPort: 5004
+      nodePort: 30004   # external port
