@@ -1,146 +1,159 @@
-# PRAVAH — Canonical Signal System (TANTRA Observability Layer)
+# PRAVAH — Observability Signal Pipeline (Phase 3)
 
 ---
 
 ## 🚀 Overview
 
-PRAVAH is a **canonical signal language system** designed to standardize how distributed systems communicate **health and state**.
+PRAVAH is a **deterministic, schema-driven signal system** that standardizes how distributed systems communicate **health and state**.
 
 It is NOT a monitoring tool.
 
-It generates:
-- Deterministic signals
-- Structured outputs
-- Schema-validated data
-- Severity-aware metrics
+It acts as a **signal pipeline** that:
+- generates signals
+- validates them
+- aggregates across services
+- streams them in real time
 
 ---
 
-## 🧠 Objective
+## 🎯 Objective
 
-- Define a **unified signal format**
-- Ensure **strict validation**
-- Provide **reliable inputs** to decision systems (Sarathi)
-- Enable future processing (InsightFlow)
+- Convert system metrics into structured signals  
+- Ensure strict schema validation  
+- Maintain deterministic severity classification  
+- Aggregate signals across multiple services  
+- Stream signals continuously for downstream systems  
 
 ---
 
-## ⚙️ Signal Schema (STRICT)
+## 🧠 System Flow
+Metrics (latency, error_rate, status)
+↓
+Signal Generation
+↓
+Schema Validation
+↓
+Aggregation
+↓
+Streaming (/signals/stream)
 
-Defined in: `signal_schema.json`
 
-```json
-{
-  "type": "object",
-  "required": [
-    "signal_type",
-    "severity",
-    "service",
-    "metric",
-    "value",
-    "timestamp",
-    "trace_id"
-  ],
-  "properties": {
-    "signal_type": { "type": "string" },
-    "severity": {
-      "type": "string",
-      "enum": ["INFO", "WARN", "CRITICAL"]
-    },
-    "service": { "type": "string" },
-    "metric": { "type": "string" },
-    "value": {},
-    "timestamp": { "type": "integer" },
-    "trace_id": {
-      "type": ["string", "null"]
-    }
-  },
-  "additionalProperties": false
-}
-⚙️ Core Features
-✅ 1. Strict Schema Enforcement
-All signals validated using JSON Schema
-Rejects invalid structure
-No extra fields allowed
-✅ 2. Deterministic Severity Engine
+---
 
-Implemented in severity_engine.py
+## ⚙️ Core Components
 
-Metric	CRITICAL	WARN	INFO
-CPU	>85	>60	≤60
-Memory	>80	>60	≤60
-Latency	>700	>400	≤400
-Error Rate	>0.5	>0.2	≤0.2
-✅ 3. Validation Layer (Strict)
-Implemented in validator.py
-Uses JSON schema validation
-Rejects:
-Missing fields
-Invalid types
-Extra fields
-✅ 4. Multi-Source Signal Generation
-🔹 Application Signals
-latency_spike
-error_spike
-🔹 CI/CD Signals
-deployment_success
-deployment_failure
-🔹 Infrastructure Signals
-pod_crash
-restart_loop
-scaling_event
-✅ 5. Trace Continuity
-trace_id is preserved across system
-If missing → explicitly null
-No artificial generation
-✅ 6. Standard Output Format
+### 🔹 1. Signal Generation
+Generates signals from:
+- Application (latency, error_rate)
+- CI/CD (deployment status)
+- Infrastructure (restart, crash, scaling)
+- Executer (execution status)
+
+---
+
+### 🔹 2. Severity Engine
+
+Deterministic classification:
+
+| Metric      | CRITICAL | WARN | INFO |
+|------------|---------|------|------|
+| Latency    | >700    | >400 | ≤400 |
+| Error Rate | >0.5    | >0.2 | ≤0.2 |
+
+---
+
+### 🔹 3. Schema Validation
+
+All signals follow strict JSON schema:
+
+- Required fields enforced  
+- Only allowed values  
+- No extra fields  
+
+---
+
+### 🔹 4. Aggregation Layer
+
+- Combines signals from multiple sources  
+- Removes duplicates  
+- Sorts by timestamp  
+- Groups by trace_id  
+
+---
+
+### 🔹 5. Streaming Layer
+
+Endpoint:
+
+GET /signals/stream  
+
+- Continuous streaming (SSE)  
+- Real-time signal flow  
+- Batched output  
+
+Example:
+
+```text
+data: [{signal}, {signal}, ...]
+
+🧪 API Endpoints
+🔹 Health
+GET /health
+
+🔹 Metrics
+GET /metrics
+
+🔹 Emit Signal
+POST /emit-signal
+
+🔹 Streaming (MAIN)
+GET /signals/stream
+
+🌐 Deployment
+Dockerized services
+Kubernetes deployment
+Namespaces:
+staging
+production
+Blue-Green deployment
+NodePort external access
+
+📊 Example Output
 {
   "signal_type": "latency_spike",
   "severity": "CRITICAL",
   "service": "application",
   "metric": "latency",
-  "value": 850,
+  "value": 800,
   "timestamp": 1710000000,
   "trace_id": "123"
 }
-🧪 API Endpoints
-🔹 Health
-GET /health
-🔹 Metrics
-GET /metrics
-🔹 Emit Signals
-POST /emit-signal
-🚀 Deployment
-✅ CI/CD
-GitHub Actions
-Docker build & push
-Kubernetes deployment
-✅ Environments
-Environment	Namespace
-Staging	staging
-Production	prod
-🔵 Blue-Green Deployment
-Blue → active version
-Green → new version
-Traffic switched using Kubernetes services
-🌐 External Access
-Service	URL
-Web1	http://<NODE-IP>:30001
-Web2	http://<NODE-IP>:30002
-Monitor	http://<NODE-IP>:30004/metrics
-🎯 Outcome
+🧪 Load Simulation
+for i in {1..10}; do
+  curl -X POST http://<NODE-IP>:30004/emit-signal \
+  -H "Content-Type: application/json" \
+  -d '{"trace_id":"'$i'","latency":800,"error_rate":0.5}'
+done
 
-✔ Strict schema validation
+🎯 Key Features
+
 ✔ Deterministic signal generation
-✔ Multi-source coverage
-✔ Production-ready deployment
-✔ TANTRA compliant
+✔ Strict schema validation
+✔ Multi-service aggregation
+✔ Real-time streaming
+✔ Trace-based grouping
+✔ Duplicate removal
+✔ Production deployment
 
 🚫 Constraints Followed
 ❌ No execution logic
 ❌ No decision-making
-❌ No recommended actions
+❌ No recommendations
 ❌ No system triggering
-👨‍💻 Author
 
-Rayyan Shaikh
+🏁 Outcome
+PRAVAH is now a distributed observability signal pipeline ready for:
+
+system-wide monitoring abstraction
+decision layer consumption
+real-world testing
