@@ -40,7 +40,7 @@ data: [{signal}, {signal}, ...]
 
 ## 🔹 Real Multi-Service Signal Output
 
-Example:
+output:
 
 ```json
 [

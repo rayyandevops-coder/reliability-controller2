@@ -91,10 +91,7 @@ GET /signals/stream
 - Real-time signal flow  
 - Batched output  
 
-Example:
-
-```text
-data: [{signal}, {signal}, ...]
+data: [{"signal_type": "latency_spike", "severity": "WARN", "service": "application", "metric": "latency", "value": 423, "timestamp": 1775892627, "trace_id": "522"}, {"signal_type": "error_spike", "severity": "INFO", "service": "application", "metric": "error_rate", "value": 0.05, "timestamp": 1775892627, "trace_id": "522"}, {"signal_type": "deployment_success", "severity": "INFO", "service": "cicd", "metric": "status", "value": 0, "timestamp": 1775892627, "trace_id": "522"}, {"signal_type": "execution_update", "severity": "INFO", "service": "executer", "metric": "status", "value": 1, "timestamp": 1775892627, "trace_id": "522"}]
 
 🧪 API Endpoints
 🔹 Health
@@ -118,7 +115,7 @@ production
 Blue-Green deployment
 NodePort external access
 
-📊 Example Output
+📊  Output
 {
   "signal_type": "latency_spike",
   "severity": "CRITICAL",
@@ -128,6 +125,7 @@ NodePort external access
   "timestamp": 1710000000,
   "trace_id": "123"
 }
+
 🧪 Load Simulation
 for i in {1..10}; do
   curl -X POST http://<NODE-IP>:30004/emit-signal \
