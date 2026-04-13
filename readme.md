@@ -1,157 +1,153 @@
-# PRAVAH — Observability Signal Pipeline (Phase 3)
+# TESTING HANDOFF — PRAVAH SYSTEM (TRUTH VALIDATION)
 
 ---
 
-## 🚀 Overview
+## 🔹 How to Run System
 
-PRAVAH is a **deterministic, schema-driven signal system** that standardizes how distributed systems communicate **health and state**.
+1. Ensure Kubernetes cluster is running
 
-It is NOT a monitoring tool.
+2. Deploy all services:
+   - monitor
+   - executer
+   - sarathi
+   - web1
+   - web2
 
-It acts as a **signal pipeline** that:
-- generates signals
-- validates them
-- aggregates across services
-- streams them in real time
+3. Get node IP:
+kubectl get nodes -o wide
 
----
-
-## 🎯 Objective
-
-- Convert system metrics into structured signals  
-- Ensure strict schema validation  
-- Maintain deterministic severity classification  
-- Aggregate signals across multiple services  
-- Stream signals continuously for downstream systems  
-
----
-
-## 🧠 System Flow
-Metrics (latency, error_rate, status)
-↓
-Signal Generation
-↓
-Schema Validation
-↓
-Aggregation
-↓
-Streaming (/signals/stream)
+4. Access monitor service:
+http://<NODE-IP>:30004
 
 
 ---
 
-## ⚙️ Core Components
+## 🔹 Endpoints to Hit
 
-### 🔹 1. Signal Generation
-Generates signals from:
-- Application (latency, error_rate)
-- CI/CD (deployment status)
-- Infrastructure (restart, crash, scaling)
-- Executer (execution status)
-
----
-
-### 🔹 2. Severity Engine
-
-Deterministic classification:
-
-| Metric      | CRITICAL | WARN | INFO |
-|------------|---------|------|------|
-| Latency    | >700    | >400 | ≤400 |
-| Error Rate | >0.5    | >0.2 | ≤0.2 |
-
----
-
-### 🔹 3. Schema Validation
-
-All signals follow strict JSON schema:
-
-- Required fields enforced  
-- Only allowed values  
-- No extra fields  
-
----
-
-### 🔹 4. Aggregation Layer
-
-- Combines signals from multiple sources  
-- Removes duplicates  
-- Sorts by timestamp  
-- Groups by trace_id  
-
----
-
-### 🔹 5. Streaming Layer
-
-Endpoint:
-
-GET /signals/stream  
-
-- Continuous streaming (SSE)  
-- Real-time signal flow  
-- Batched output  
-
-data: [{"signal_type": "latency_spike", "severity": "WARN", "service": "application", "metric": "latency", "value": 423, "timestamp": 1775892627, "trace_id": "522"}, {"signal_type": "error_spike", "severity": "INFO", "service": "application", "metric": "error_rate", "value": 0.05, "timestamp": 1775892627, "trace_id": "522"}, {"signal_type": "deployment_success", "severity": "INFO", "service": "cicd", "metric": "status", "value": 0, "timestamp": 1775892627, "trace_id": "522"}, {"signal_type": "execution_update", "severity": "INFO", "service": "executer", "metric": "status", "value": 1, "timestamp": 1775892627, "trace_id": "522"}]
-
-🧪 API Endpoints
-🔹 Health
+### 1. Health Check
 GET /health
 
-🔹 Metrics
-GET /metrics
+---
 
-🔹 Emit Signal
+### 2. Emit Signal (REAL INPUT)
 POST /emit-signal
 
-🔹 Streaming (MAIN)
+Example:
+```json
+{
+  "trace_id": "real1",
+  "latency": 900,
+  "error_rate": 0.7
+}
+3. Update Stream Input
+
+POST /update-stream
+
+{
+  "trace_id": "real1",
+  "latency": 950,
+  "error_rate": 0.8
+}
+4. Streaming (CRITICAL)
+
 GET /signals/stream
 
-🌐 Deployment
-Dockerized services
-Kubernetes deployment
-Namespaces:
-staging
-production
-Blue-Green deployment
-NodePort external access
+🔹 Expected Outputs
 
-📊  Output
+Streaming Output:
+
+data: [{signal}, {signal}, ...]
+
+Each signal must include:
+
+signal_type
+severity (INFO / WARN / CRITICAL)
+service
+metric
+value (typed)
+timestamp
+trace_id
+🔹 Real Infra Validation Test (MANDATORY)
+Step 1: Trigger real event
+kubectl delete pod web1-blue-xxxxx -n prod
+Step 2: Verify infra
+kubectl get pods -n prod
+
+(New pod should be created)
+
+Step 3: Validate stream
+curl http://<NODE-IP>:30004/signals/stream
+
+Expected:
+
+signal_type: pod_crash
+service: kubernetes
+severity: CRITICAL
+trace_id: real1
+🔹 Failure Scenarios to Test
+❌ 1. Invalid Input
+{}
+
+Expected:
+
+Request rejected
+Error returned
+❌ 2. Invalid Data Type
 {
-  "signal_type": "latency_spike",
-  "severity": "CRITICAL",
-  "service": "application",
-  "metric": "latency",
-  "value": 800,
-  "timestamp": 1710000000,
-  "trace_id": "123"
+  "trace_id": "t1",
+  "latency": "high"
 }
 
-🧪 Load Simulation
+Expected:
+
+Validation failure
+❌ 3. Schema Violation
+Missing fields
+Extra fields
+
+Expected:
+
+Rejected by validator
+❌ 4. Duplicate Signals
+
+Expected:
+
+Removed in aggregation
+🔹 Load Testing
 for i in {1..10}; do
   curl -X POST http://<NODE-IP>:30004/emit-signal \
   -H "Content-Type: application/json" \
   -d '{"trace_id":"'$i'","latency":800,"error_rate":0.5}'
 done
 
-🎯 Key Features
+Expected:
 
-✔ Deterministic signal generation
-✔ Strict schema validation
-✔ Multi-service aggregation
-✔ Real-time streaming
-✔ Trace-based grouping
-✔ Duplicate removal
-✔ Production deployment
+Stable system
+No crashes
+Correct structured output
+🔹 PASS Criteria
 
-🚫 Constraints Followed
-❌ No execution logic
-❌ No decision-making
-❌ No recommendations
-❌ No system triggering
+✔ Real infra event reflected in signals
+✔ Continuous streaming working
+✔ Correct schema (typed values)
+✔ Same trace_id across signals
+✔ No duplicate signals
+✔ System stable under load
 
-🏁 Outcome
-PRAVAH is now a distributed observability signal pipeline ready for:
+🔹 FAIL Criteria
 
-system-wide monitoring abstraction
-decision layer consumption
-real-world testing
+❌ Simulated/random data used
+❌ Missing fields
+❌ Invalid schema
+❌ Duplicate signals
+❌ Stream not reflecting real events
+❌ System crash
+
+🎯 Final Goal
+
+System must be:
+
+deterministic
+schema-validated
+real-event driven
+reliable

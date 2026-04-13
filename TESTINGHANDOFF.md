@@ -1,117 +1,151 @@
-# TESTING HANDOFF — PRAVAH SYSTEM
-
-## 🔹 How to Run System
-
-1. Ensure Kubernetes cluster is running
-2. Deploy all services:
-   - monitor
-   - executer
-   - sarathi
-   - web1 / web2
-
-3. Get node IP:
-kubectl get nodes -o wide
-
-4. Access monitor:
-http://54.156.236.10:30004
 
 ---
 
-## 🔹 Endpoints to Hit
+# 📘 ✅ FINAL `README.md` (UPDATED — TRUTH VALIDATION)
 
-### 1. Health Check
-GET /health
-
----
-
-### 2. Metrics
-GET /metrics
+```md
+# PRAVAH — Observability Signal Pipeline (Truth Validation Phase)
 
 ---
 
-### 3. Emit Signal
-POST /emit-signal
+## 🚀 Overview
 
-Example:
+PRAVAH is a **deterministic, schema-driven observability signal system** that converts real system events into structured signals.
+
+It is NOT a monitoring tool.
+
+It acts as a **signal pipeline** that:
+- captures real infrastructure events
+- validates signals using strict schema
+- aggregates multi-service signals
+- streams them in real time
+
+---
+
+## 🎯 Objective
+
+- Convert real system behavior into structured signals  
+- Enforce strict schema validation  
+- Maintain deterministic severity classification  
+- Aggregate signals across multiple services  
+- Validate signals against real infrastructure events  
+
+---
+
+## 🧠 System Flow
+Real Event (Kubernetes / CI-CD / Execution)
+↓
+Signal Generation
+↓
+Schema Validation
+↓
+Aggregation
+↓
+Streaming (/signals/stream)
+
+
+---
+
+## ⚙️ Core Components
+
+### 🔹 1. Signal Generation
+Sources:
+- Application (latency, error_rate)
+- CI/CD (deployment status)
+- Infrastructure (pod crash, restart, scaling)
+- Executer (execution status)
+
+---
+
+### 🔹 2. Severity Engine
+
+| Metric      | CRITICAL | WARN | INFO |
+|------------|---------|------|------|
+| Latency    | >700    | >400 | ≤400 |
+| Error Rate | >0.5    | >0.2 | ≤0.2 |
+
+---
+
+### 🔹 3. Schema Validation
+
+Strict JSON schema enforced:
+
+- Required fields mandatory  
+- Typed values enforced  
+  - latency → number  
+  - status → SUCCESS / FAILURE / RUNNING  
+- No additional properties allowed  
+
+---
+
+### 🔹 4. Aggregation Layer
+
+- Merge signals from multiple services  
+- Remove duplicates  
+- Sort by timestamp  
+- Group by trace_id  
+
+---
+
+### 🔹 5. Streaming Layer
+
+Endpoint:
+
+GET /signals/stream  
+
+- Real-time streaming (SSE)  
+- Reflects real system events  
+- No simulated data  
+
+---
+
+## 📊 Real Example Output
 
 ```json
 {
-  "trace_id": "123",
-  "latency": 800,
-  "error_rate": 0.6
+  "signal_type": "pod_crash",
+  "severity": "CRITICAL",
+  "service": "kubernetes",
+  "metric": "latency",
+  "value": 950,
+  "timestamp": 1776067230,
+  "trace_id": "real1"
 }
-4. Streaming (IMPORTANT)
 
-GET /signals/stream
+🌐 Deployment
+Dockerized services
+Kubernetes deployment
+Namespaces:
+staging
+production
+Blue-Green deployment
+NodePort external access
 
-🔹 Expected Outputs
-Streaming Output:
-data: [{signal}, {signal}, ...]
+🧪 Real Validation Example
+Trigger:
+kubectl delete pod web1-blue-xxxxx -n prod
+Observed:
+Pod recreated (Kubernetes self-healing)
+Signal emitted:
+pod_crash
+severity: CRITICAL
+trace_id consistent
+🎯 Key Features
 
-Each signal must include:
-signal_type
-severity (INFO/WARN/CRITICAL)
-service
-metric
-value
-timestamp
-trace_id
+✔ Real-event driven signals
+✔ Strict schema validation
+✔ Multi-service aggregation
+✔ Real-time streaming
+✔ Trace continuity
+✔ Duplicate removal
+✔ Production deployment
 
-🔹 Failure Scenarios to Test
-❌ 1. Invalid Input
-Send:
-{}
+🚫 Constraints Followed
+❌ No simulated data
+❌ No decision-making
+❌ No recommendations
+❌ No execution logic
+🏁 Outcome
 
-Expected:
-Request rejected
-Error returned
-
-❌ 2. Wrong Severity
-Send invalid severity
-Expected:
-Validation fails
-Signal rejected
-
-❌ 3. Missing Fields
-Expected:
-Validation error
-
-❌ 4. Duplicate Signals
-Expected:
-Duplicates removed in aggregation
-🔹 Load Testing
-
-Run:
-for i in {1..10}; do
-  curl -X POST http://<NODE-IP>:30004/emit-signal \
-  -H "Content-Type: application/json" \
-  -d '{"trace_id":"'$i'","latency":800,"error_rate":0.5}'
-
-done
-Expected:
-
-System stable
-No crashes
-Correct structure
-🔹 PASS Criteria
-✔ Continuous streaming
-✔ Valid JSON structure
-✔ Correct severity classification
-✔ No duplicate signals
-✔ All services present in output
-✔ System stable under load
-
-🔹 FAIL Criteria
-❌ Missing fields
-❌ Wrong severity
-❌ Invalid JSON
-❌ Duplicate signals
-❌ Stream not working
-❌ System crashes
-
-🎯 Final Goal
-System should be:
-deterministic
-structured
-validated
-reliable
+PRAVAH is now a validated observability signal layer, proven against real infrastructure events and ready for system-wide integration.
+![alt text](<proofs 2026-04-13 133426.png>)

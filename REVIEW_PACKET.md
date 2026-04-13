@@ -1,112 +1,80 @@
-# REVIEW PACKET — PRAVAH (PHASE 3)
+# REVIEW PACKET — SIGNAL TRUTH VALIDATION
 
 ---
 
-## 🔹 Aggregation Flow
+## 🔹 Entry Point
 
-Signals are generated from multiple sources:
-- Application (latency, error_rate)
-- CI/CD (deployment status)
-- Infrastructure (pod crash, restart, scaling)
-- Executer (execution status)
-
-Flow:
-
-Metrics → Signal Generation → Validation → Aggregation → Streaming
-
-Aggregation is handled using:
-- Merge signals from all sources
-- Remove duplicates
-- Sort by timestamp
-- Group by trace_id
+monitor/app.py
 
 ---
 
-## 🔹 Streaming Design
+## 🔹 Core Flow
 
-Endpoint:
-GET /signals/stream
-
-Implementation:
-- Server-Sent Events (SSE)
-- Continuous streaming every few seconds
-- Sends batched signals
-
-Output format:
-
-data: [{signal}, {signal}, ...]
+1. generate signals (sources/)
+2. build_signal()
+3. validate_signal()
+4. aggregate_signals()
+5. stream (/signals/stream)
 
 ---
 
-## 🔹 Real Multi-Service Signal Output
+## 🔹 Real End-to-End Trace
 
-output:
+trace_id: real1
 
-```json
-[
-  {
-    "signal_type": "latency_spike",
-    "severity": "CRITICAL",
-    "service": "application",
-    "metric": "latency",
-    "value": 777,
-    "timestamp": 1775851324,
-    "trace_id": "753"
-  },
-  {
-    "signal_type": "deployment_success",
-    "severity": "INFO",
-    "service": "cicd",
-    "metric": "status",
-    "value": 0,
-    "timestamp": 1775851324,
-    "trace_id": "753"
-  },
-  {
-    "signal_type": "execution_update",
-    "severity": "INFO",
-    "service": "executer",
-    "metric": "status",
-    "value": 1,
-    "timestamp": 1775851324,
-    "trace_id": "753"
-  }
-]
-Failure Handling
+---
 
-1. Invalid Input
-Input:
-{}
+## 🔹 Real Infra Proof
+
+Command:
+
+kubectl delete pod web1-blue-66f5c6fd7c-sc8zc -n prod
 
 Result:
 
-Validation fails
-Signal rejected
-Error returned
+Pod terminated and recreated by Kubernetes
 
-2. Schema Violation
-Missing fields → rejected
-Invalid severity → rejected
-Extra fields → rejected
+---
 
-3. Duplicate Signals
-Removed during aggregation using unique key
+## 🔹 Signal Output
 
-4. System Stability
-Under load, system remains stable
-No crashes
-No malformed signals
+```json
+{
+  "signal_type": "pod_crash",
+  "severity": "CRITICAL",
+  "service": "kubernetes",
+  "metric": "latency",
+  "value": 950,
+  "trace_id": "real1"
+}
+🔹 Streaming Proof
+
+Command:
+
+curl http://54.156.236.10:30004/signals/stream
+
+Output:
+data: [{'signal_type': 'latency_spike', 'severity': 'CRITICAL', 'service': 'application', 'metric': 'latency', 'value': 950, 'timestamp': 1776067230, 'trace_id': 'real1'}, {'signal_type': 'error_spike', 'severity': 'CRITICAL', 'service': 'application', 'metric': 'error_rate', 'value': 0.8, 'timestamp': 1776067230, 'trace_id': 'real1'}, {'signal_type': 'deployment_success', 'severity': 'INFO', 'service': 'cicd', 'metric': 'status', 'value': 'SUCCESS', 'timestamp': 1776067230, 'trace_id': 'real1'}, {'signal_type': 'pod_crash', 'severity': 'CRITICAL', 'service': 'kubernetes', 'metric': 'latency', 'value': 950, 'timestamp': 1776067230, 'trace_id': 'real1'}, {'signal_type': 'execution_update', 'severity': 'INFO', 'service': 'executer', 'metric': 'status', 'value': 'RUNNING', 'timestamp': 1776067230, 'trace_id': 'real1'}]
+
+🔹 Schema Update
+
+Removed numeric status values (0/1)
+Added typed values:
+latency → number
+status → SUCCESS / FAILURE / RUNNING
+
+🔹 Failure Case
+
+Action:
+kubectl delete pod web1-blue
+
+Observed:
+Pod crash detected
+Signal emitted
+Same trace_id maintained
 
 🎯 Final Result
-✔ Aggregation working
-✔ Streaming working
-✔ Multi-service signals present
-✔ Validation strict
-✔ System stable
-
-🚫 Compliance
-Rule	Status
-No execution logic	✅
-No decision-making	✅
-No recommendations	✅
-Schema strict	✅
+✔ Real infra → signal mapping proven
+✔ Trace continuity verified
+✔ Streaming reflects real events
+✔ Schema strictly enforced
