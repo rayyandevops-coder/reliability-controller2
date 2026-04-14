@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify, Response
+import time
 
 from signal_builder import build_signal
 from sources.infra import generate_infra_signals
@@ -8,27 +9,38 @@ from sources.executer_logs import generate_executer_signals
 from deployment_status import get_deployment_status
 
 from aggregator import aggregate_signals
-from streamer import stream_signals
 
 app = Flask(__name__)
 
+# 🔥 USER EVENTS STORE
+user_events = []
 
-# ✅ REAL INPUT METRICS (NO RANDOM)
-@app.route("/metrics")
-def metrics():
-    latency = int(request.args.get("latency", 0))
-    error_rate = float(request.args.get("error_rate", 0))
-    trace_id = request.args.get("trace_id", None)
+# ------------------ USER EVENT TRACKING ------------------
 
-    return jsonify({
-        "latency": latency,
-        "error_rate": error_rate,
-        "trace_id": trace_id
-    })
+@app.route("/track-event", methods=["POST"])
+def track_event():
+    try:
+        data = request.get_json()
+
+        required = ["user_id", "event_type", "timestamp", "session_id"]
+
+        for field in required:
+            if field not in data:
+                return jsonify({"error": f"{field} missing"}), 400
+
+        user_events.append(data)
+
+        print("[EVENT]", data, flush=True)
+
+        return jsonify({"status": "event recorded"})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
-# ✅ GENERATE SIGNALS FROM REAL INPUT
-def generate_all_signals_from_input(trace_id, latency, error_rate):
+# ------------------ SIGNAL GENERATION ------------------
+
+def generate_all_signals(trace_id, latency, error_rate):
     deployment_status = get_deployment_status()["status"]
 
     raw = []
@@ -37,37 +49,37 @@ def generate_all_signals_from_input(trace_id, latency, error_rate):
     raw += generate_infra_signals(trace_id, latency)
     raw += generate_executer_signals(trace_id)
 
-    built = [
+    return [
         build_signal(st, svc, metric, val, trace_id)
         for (st, svc, metric, val) in raw
     ]
 
-    return built
 
+# ------------------ EMIT SIGNAL ------------------
 
-# ✅ MAIN SIGNAL ENDPOINT (REAL DATA ONLY)
 @app.route("/emit-signal", methods=["POST"])
 def emit_signal():
     try:
         data = request.get_json()
 
         trace_id = data.get("trace_id")
-        latency = data.get("latency")
-        error_rate = data.get("error_rate")
+        latency = data.get("latency", 0)
+        error_rate = data.get("error_rate", 0)
 
-        if trace_id is None:
+        if not trace_id:
             return jsonify({"error": "trace_id required"}), 400
 
-        signals = generate_all_signals_from_input(trace_id, latency, error_rate)
+        signals = generate_all_signals(trace_id, latency, error_rate)
         aggregated = aggregate_signals(signals)
 
         return jsonify(aggregated)
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"error": str(e)}), 500
 
 
-# ✅ STREAM USING LAST INPUT (NO RANDOM)
+# ------------------ STREAM ------------------
+
 last_input = {
     "trace_id": "stream-1",
     "latency": 0,
@@ -88,24 +100,28 @@ def update_stream():
 
 def stream_generator():
     while True:
-        signals = generate_all_signals_from_input(
+        signals = generate_all_signals(
             last_input["trace_id"],
             last_input["latency"],
             last_input["error_rate"]
         )
         yield f"data: {signals}\n\n"
+        time.sleep(2)
 
 
-# 🔥 STREAM ENDPOINT (REAL DATA BASED)
 @app.route("/signals/stream")
 def stream():
     return Response(stream_generator(), mimetype="text/event-stream")
 
 
+# ------------------ HEALTH ------------------
+
 @app.route("/health")
 def health():
-    return jsonify({"status": "pravah_running"})
+    return jsonify({"status": "healthy"})
 
+
+# ------------------ MAIN ------------------
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5004)
