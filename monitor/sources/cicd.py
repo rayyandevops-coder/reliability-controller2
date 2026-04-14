@@ -3,7 +3,6 @@ def generate_cicd_signals(trace_id, deployment_status):
         return [
             ("deployment_failure", "cicd", "status", "FAILURE")
         ]
-    else:
-        return [
-            ("deployment_success", "cicd", "status", "SUCCESS")
-        ]
+    return [
+        ("deployment_success", "cicd", "status", "SUCCESS")
+    ]

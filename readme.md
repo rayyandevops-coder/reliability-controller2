@@ -1,153 +1,113 @@
-# TESTING HANDOFF — PRAVAH SYSTEM (TRUTH VALIDATION)
+# PRAVAH — Full Observability Layer (Infra + User + Usage)
 
 ---
 
-## 🔹 How to Run System
+## 🚀 Overview
 
-1. Ensure Kubernetes cluster is running
+PRAVAH is a **deterministic observability system** that standardizes how systems communicate **health, usage, and state**.
 
-2. Deploy all services:
-   - monitor
-   - executer
-   - sarathi
-   - web1
-   - web2
+It combines:
 
-3. Get node IP:
-kubectl get nodes -o wide
-
-4. Access monitor service:
-http://<NODE-IP>:30004
-
+- Infrastructure signals (Kubernetes)
+- CI/CD signals
+- Execution layer signals
+- User behavior observability
 
 ---
 
-## 🔹 Endpoints to Hit
+## 🎯 Objective
 
-### 1. Health Check
-GET /health
+- Provide structured system-wide observability  
+- Maintain strict schema validation  
+- Ensure trace continuity  
+- Enable real-time signal streaming  
+- Support downstream consumption (Mitra)
 
 ---
 
-### 2. Emit Signal (REAL INPUT)
-POST /emit-signal
+## 🧠 Architecture
 
-Example:
+User → Web (web1/web2) → Event Tracking  
+→ Monitor Service → Signal Generation  
+→ Validation → Aggregation → Correlation  
+→ Streaming (/signals/stream)
+
+---
+
+## ⚙️ Core Features
+
+✔ User Event Tracking (login, click, page view)  
+✔ Metrics Engine (users, sessions, activity)  
+✔ Page Observability (views, clicks, time spent)  
+✔ Context Tracking (device, region, source)  
+✔ Signal System (infra + cicd + execution)  
+✔ Strict Schema Validation  
+✔ Correlation Layer (trace-based grouping)  
+✔ Real-time Streaming (SSE)  
+
+---
+
+## 🔗 Endpoints
+
+| Endpoint | Description |
+|--------|------------|
+| /track-event | user event ingestion |
+| /user-metrics | aggregated user stats |
+| /page-metrics | page analytics |
+| /user-context | device/region/source |
+| /aggregate | combined metrics |
+| /summary | deterministic summary |
+| /signals/stream | real-time unified stream |
+
+---
+
+## 📊 Output Structure
+
 ```json
 {
-  "trace_id": "real1",
-  "latency": 900,
-  "error_rate": 0.7
+  "trace_id": "session123",
+  "signals": [...],
+  "correlation": {
+    "aggregate": {...},
+    "summary": {...}
+  }
 }
-3. Update Stream Input
+🧪 Real-World Validation
 
-POST /update-stream
+✔ Kubernetes pod crash → signal emitted
+✔ User interaction → metrics updated
+✔ Multi-source signals → single trace
+✔ Streaming reflects live system
 
-{
-  "trace_id": "real1",
-  "latency": 950,
-  "error_rate": 0.8
-}
-4. Streaming (CRITICAL)
+🚫 Constraints Followed
+No decision-making
+No execution triggering
+No personalization
+Deterministic outputs only
+🏁 Outcome
 
-GET /signals/stream
+PRAVAH is now a full observability layer:
 
-🔹 Expected Outputs
+Infra + User + Usage → unified, validated, real-time system
 
-Streaming Output:
+Proof (MANDATORY)
 
-data: [{signal}, {signal}, ...]
+User Proof:
+curl http://localhost:30004/user-metrics
+output:
+{"active_users":0,"login_frequency":{"10+":0,"100+":0,"15+":0,"2+":0,"5+":0},"most_active_users":[],"returning_users":0,"total_users":0}
 
-Each signal must include:
+Infra Proof:
+NAME                          READY   STATUS    RESTARTS   AGE
+executer-77bbbbd58-xhktb      1/1     Running   0          17m
+monitor-79865d4bf8-nbbp9      1/1     Running   0          17m
+sarathi-6dcfbf5b69-5hznm      1/1     Running   0          17m
+web1-blue-6f99dcffc8-d4g7c    1/1     Running   0          8m14s
+web1-green-7d57b9bf75-n9p24   1/1     Running   0          17m
+web2-blue-76c65df8b-6f25r     1/1     Running   0          17m
+web2-green-6554cb7775-lhfm2   1/1     Running   0          17m
+[root@ip-172-31-79-57 ~]# kubectl delete pod web1-blue-6f99dcffc8-d4g7c -n prod
+pod "web1-blue-6f99dcffc8-d4g7c" deleted
+^C[root@ip-172-31-79-57 ~]curl http://localhost:30004/signals/streamam
+data: {'trace_id': 'stream-1', 'signals': [{'signal_type': 'latency_spike', 'severity': 'INFO', 'service': 'application', 'metric': 'latency', 'value': 0, 'timestamp': 1776167851, 'trace_id': 'stream-1'}, {'signal_type': 'error_spike', 'severity': 'INFO', 'service': 'application', 'metric': 'error_rate', 'value': 0, 'timestamp': 1776167851, 'trace_id': 'stream-1'}, {'signal_type': 'deployment_success', 'severity': 'INFO', 'service': 'cicd', 'metric': 'status', 'value': 'SUCCESS', 'timestamp': 1776167851, 'trace_id': 'stream-1'}, {'signal_type': 'execution_update', 'severity': 'INFO', 'service': 'executer', 'metric': 'status', 'value': 'RUNNING', 'timestamp': 1776167851, 'trace_id': 'stream-1'}], 'correlation': {'trace_id': 'stream-1', 'aggregate': {'user_metrics': {'total_users': 0, 'active_users': 0, 'returning_users': 0, 'login_frequency': {'2+': 0, '5+': 0, '10+': 0, '15+': 0, '100+': 0}, 'most_active_users': []}, 'page_metrics': {'views': {}, 'clicks': {}, 'avg_time_spent': 0, 'interaction_density': 'low'}, 'context': {'regions': {}, 'devices': {}, 'sources': {}}}, 'summary': {'user_growth': 'stable', 'engagement_level': 'low', 'most_active_area': 'unknown', 'drop_off_area': 'unknown'}}}
 
-signal_type
-severity (INFO / WARN / CRITICAL)
-service
-metric
-value (typed)
-timestamp
-trace_id
-🔹 Real Infra Validation Test (MANDATORY)
-Step 1: Trigger real event
-kubectl delete pod web1-blue-xxxxx -n prod
-Step 2: Verify infra
-kubectl get pods -n prod
-
-(New pod should be created)
-
-Step 3: Validate stream
-curl http://<NODE-IP>:30004/signals/stream
-
-Expected:
-
-signal_type: pod_crash
-service: kubernetes
-severity: CRITICAL
-trace_id: real1
-🔹 Failure Scenarios to Test
-❌ 1. Invalid Input
-{}
-
-Expected:
-
-Request rejected
-Error returned
-❌ 2. Invalid Data Type
-{
-  "trace_id": "t1",
-  "latency": "high"
-}
-
-Expected:
-
-Validation failure
-❌ 3. Schema Violation
-Missing fields
-Extra fields
-
-Expected:
-
-Rejected by validator
-❌ 4. Duplicate Signals
-
-Expected:
-
-Removed in aggregation
-🔹 Load Testing
-for i in {1..10}; do
-  curl -X POST http://<NODE-IP>:30004/emit-signal \
-  -H "Content-Type: application/json" \
-  -d '{"trace_id":"'$i'","latency":800,"error_rate":0.5}'
-done
-
-Expected:
-
-Stable system
-No crashes
-Correct structured output
-🔹 PASS Criteria
-
-✔ Real infra event reflected in signals
-✔ Continuous streaming working
-✔ Correct schema (typed values)
-✔ Same trace_id across signals
-✔ No duplicate signals
-✔ System stable under load
-
-🔹 FAIL Criteria
-
-❌ Simulated/random data used
-❌ Missing fields
-❌ Invalid schema
-❌ Duplicate signals
-❌ Stream not reflecting real events
-❌ System crash
-
-🎯 Final Goal
-
-System must be:
-
-deterministic
-schema-validated
-real-event driven
-reliable

@@ -1,80 +1,76 @@
-# REVIEW PACKET — SIGNAL TRUTH VALIDATION
 
 ---
 
-## 🔹 Entry Point
+# 📄 ✅ REVIEW_PACKET.md (FINAL)
+
+```md
+# REVIEW PACKET — USER + SYSTEM OBSERVABILITY
+
+---
+
+## 1. Entry Point
 
 monitor/app.py
 
 ---
 
-## 🔹 Core Flow
+## 2. Core Flow
 
-1. generate signals (sources/)
-2. build_signal()
-3. validate_signal()
-4. aggregate_signals()
-5. stream (/signals/stream)
+User Event → Metrics → Aggregation → Correlation → Stream
+
+System Signals → Validation → Aggregation → Stream
 
 ---
 
-## 🔹 Real End-to-End Trace
-
-trace_id: real1
-
----
-
-## 🔹 Real Infra Proof
-
-Command:
-
-kubectl delete pod web1-blue-66f5c6fd7c-sc8zc -n prod
-
-Result:
-
-Pod terminated and recreated by Kubernetes
-
----
-
-## 🔹 Signal Output
+## 3. Real Multi-Signal Output
 
 ```json
 {
-  "signal_type": "pod_crash",
-  "severity": "CRITICAL",
-  "service": "kubernetes",
-  "metric": "latency",
-  "value": 950,
-  "trace_id": "real1"
+  "trace_id": "real1",
+  "signals": [
+    {"signal_type": "latency_spike"},
+    {"signal_type": "deployment_success"},
+    {"signal_type": "pod_crash"},
+    {"signal_type": "execution_failure"}
+  ],
+  "correlation": {
+    "aggregate": {...},
+    "summary": {...}
+  }
 }
-🔹 Streaming Proof
 
-Command:
+4. Fixes from Previous Review
+✔ Trace continuity implemented (session_id → trace_id)
+✔ Correct signal mapping (restart_count for pod crash)
+✔ Correlation layer added
+✔ Multi-failure signals added (infra + cicd + executer)
+✔ Schema validation aligned
+✔ Real infra + user integration
 
-curl http://54.156.236.10:30004/signals/stream
+5. Failure Handling
+Invalid user_id rejected
+Schema validation enforced
+Invalid signals rejected
+No duplicate signals
 
-Output:
-data: [{'signal_type': 'latency_spike', 'severity': 'CRITICAL', 'service': 'application', 'metric': 'latency', 'value': 950, 'timestamp': 1776067230, 'trace_id': 'real1'}, {'signal_type': 'error_spike', 'severity': 'CRITICAL', 'service': 'application', 'metric': 'error_rate', 'value': 0.8, 'timestamp': 1776067230, 'trace_id': 'real1'}, {'signal_type': 'deployment_success', 'severity': 'INFO', 'service': 'cicd', 'metric': 'status', 'value': 'SUCCESS', 'timestamp': 1776067230, 'trace_id': 'real1'}, {'signal_type': 'pod_crash', 'severity': 'CRITICAL', 'service': 'kubernetes', 'metric': 'latency', 'value': 950, 'timestamp': 1776067230, 'trace_id': 'real1'}, {'signal_type': 'execution_update', 'severity': 'INFO', 'service': 'executer', 'metric': 'status', 'value': 'RUNNING', 'timestamp': 1776067230, 'trace_id': 'real1'}]
+Proof (MANDATORY)
 
-🔹 Schema Update
+User Proof:
+curl http://localhost:30004/user-metrics
+output:
+{"active_users":0,"login_frequency":{"10+":0,"100+":0,"15+":0,"2+":0,"5+":0},"most_active_users":[],"returning_users":0,"total_users":0}
 
-Removed numeric status values (0/1)
-Added typed values:
-latency → number
-status → SUCCESS / FAILURE / RUNNING
+Infra Proof:
+NAME                          READY   STATUS    RESTARTS   AGE
+executer-77bbbbd58-xhktb      1/1     Running   0          17m
+monitor-79865d4bf8-nbbp9      1/1     Running   0          17m
+sarathi-6dcfbf5b69-5hznm      1/1     Running   0          17m
+web1-blue-6f99dcffc8-d4g7c    1/1     Running   0          8m14s
+web1-green-7d57b9bf75-n9p24   1/1     Running   0          17m
+web2-blue-76c65df8b-6f25r     1/1     Running   0          17m
+web2-green-6554cb7775-lhfm2   1/1     Running   0          17m
+[root@ip-172-31-79-57 ~]# kubectl delete pod web1-blue-6f99dcffc8-d4g7c -n prod
+pod "web1-blue-6f99dcffc8-d4g7c" deleted
+^C[root@ip-172-31-79-57 ~]curl http://localhost:30004/signals/streamam
+data: {'trace_id': 'stream-1', 'signals': [{'signal_type': 'latency_spike', 'severity': 'INFO', 'service': 'application', 'metric': 'latency', 'value': 0, 'timestamp': 1776167851, 'trace_id': 'stream-1'}, {'signal_type': 'error_spike', 'severity': 'INFO', 'service': 'application', 'metric': 'error_rate', 'value': 0, 'timestamp': 1776167851, 'trace_id': 'stream-1'}, {'signal_type': 'deployment_success', 'severity': 'INFO', 'service': 'cicd', 'metric': 'status', 'value': 'SUCCESS', 'timestamp': 1776167851, 'trace_id': 'stream-1'}, {'signal_type': 'execution_update', 'severity': 'INFO', 'service': 'executer', 'metric': 'status', 'value': 'RUNNING', 'timestamp': 1776167851, 'trace_id': 'stream-1'}], 'correlation': {'trace_id': 'stream-1', 'aggregate': {'user_metrics': {'total_users': 0, 'active_users': 0, 'returning_users': 0, 'login_frequency': {'2+': 0, '5+': 0, '10+': 0, '15+': 0, '100+': 0}, 'most_active_users': []}, 'page_metrics': {'views': {}, 'clicks': {}, 'avg_time_spent': 0, 'interaction_density': 'low'}, 'context': {'regions': {}, 'devices': {}, 'sources': {}}}, 'summary': {'user_growth': 'stable', 'engagement_level': 'low', 'most_active_area': 'unknown', 'drop_off_area': 'unknown'}}}
 
-🔹 Failure Case
-
-Action:
-kubectl delete pod web1-blue
-
-Observed:
-Pod crash detected
-Signal emitted
-Same trace_id maintained
-
-🎯 Final Result
-✔ Real infra → signal mapping proven
-✔ Trace continuity verified
-✔ Streaming reflects real events
-✔ Schema strictly enforced

@@ -22,7 +22,7 @@
     },
     "metric": {
       "type": "string",
-      "enum": ["latency", "error_rate", "status"]
+      "enum": ["latency", "error_rate", "status", "restart_count"]
     },
 
     "value": {

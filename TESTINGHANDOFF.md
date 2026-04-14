@@ -1,151 +1,144 @@
 
 ---
 
-# 📘 ✅ FINAL `README.md` (UPDATED — TRUTH VALIDATION)
+# 📄 ✅ TESTING_HANDOFF.md (FINAL)
 
 ```md
-# PRAVAH — Observability Signal Pipeline (Truth Validation Phase)
+# TESTING HANDOFF — PRAVAH SYSTEM
 
 ---
 
-## 🚀 Overview
+## 🔹 How to Run
 
-PRAVAH is a **deterministic, schema-driven observability signal system** that converts real system events into structured signals.
+1. Deploy system:
 
-It is NOT a monitoring tool.
+kubectl apply -f k8s/
 
-It acts as a **signal pipeline** that:
-- captures real infrastructure events
-- validates signals using strict schema
-- aggregates multi-service signals
-- streams them in real time
+2. Get Node IP:
 
----
+kubectl get nodes -o wide
 
-## 🎯 Objective
+3. Access Monitor:
 
-- Convert real system behavior into structured signals  
-- Enforce strict schema validation  
-- Maintain deterministic severity classification  
-- Aggregate signals across multiple services  
-- Validate signals against real infrastructure events  
+http://54.156.236.10:30004
 
 ---
 
-## 🧠 System Flow
-Real Event (Kubernetes / CI-CD / Execution)
-↓
-Signal Generation
-↓
-Schema Validation
-↓
-Aggregation
-↓
-Streaming (/signals/stream)
+## 🔹 Endpoints
 
-
----
-
-## ⚙️ Core Components
-
-### 🔹 1. Signal Generation
-Sources:
-- Application (latency, error_rate)
-- CI/CD (deployment status)
-- Infrastructure (pod crash, restart, scaling)
-- Executer (execution status)
-
----
-
-### 🔹 2. Severity Engine
-
-| Metric      | CRITICAL | WARN | INFO |
-|------------|---------|------|------|
-| Latency    | >700    | >400 | ≤400 |
-| Error Rate | >0.5    | >0.2 | ≤0.2 |
-
----
-
-### 🔹 3. Schema Validation
-
-Strict JSON schema enforced:
-
-- Required fields mandatory  
-- Typed values enforced  
-  - latency → number  
-  - status → SUCCESS / FAILURE / RUNNING  
-- No additional properties allowed  
-
----
-
-### 🔹 4. Aggregation Layer
-
-- Merge signals from multiple services  
-- Remove duplicates  
-- Sort by timestamp  
-- Group by trace_id  
-
----
-
-### 🔹 5. Streaming Layer
-
-Endpoint:
-
+GET /health  
+GET /user-metrics  
+GET /page-metrics  
+GET /user-context  
+GET /aggregate  
+GET /summary  
 GET /signals/stream  
 
-- Real-time streaming (SSE)  
-- Reflects real system events  
-- No simulated data  
+---
+
+## 🔹 Test Cases
 
 ---
 
-## 📊 Real Example Output
+### ✅ 1. User Flow
 
-```json
-{
-  "signal_type": "pod_crash",
-  "severity": "CRITICAL",
-  "service": "kubernetes",
-  "metric": "latency",
-  "value": 950,
-  "timestamp": 1776067230,
-  "trace_id": "real1"
-}
+Steps:
+- Open web1/web2
+- Login
+- Click button
 
-🌐 Deployment
-Dockerized services
-Kubernetes deployment
-Namespaces:
-staging
-production
-Blue-Green deployment
-NodePort external access
+Check:
 
-🧪 Real Validation Example
-Trigger:
-kubectl delete pod web1-blue-xxxxx -n prod
-Observed:
-Pod recreated (Kubernetes self-healing)
-Signal emitted:
-pod_crash
-severity: CRITICAL
-trace_id consistent
-🎯 Key Features
+curl /user-metrics
 
-✔ Real-event driven signals
-✔ Strict schema validation
-✔ Multi-service aggregation
-✔ Real-time streaming
-✔ Trace continuity
-✔ Duplicate removal
-✔ Production deployment
+Expected:
+✔ users count increases  
+✔ activity tracked  
 
-🚫 Constraints Followed
-❌ No simulated data
-❌ No decision-making
-❌ No recommendations
-❌ No execution logic
-🏁 Outcome
+---
 
-PRAVAH is now a validated observability signal layer, proven against real infrastructure events and ready for system-wide integration.
-![alt text](<proofs 2026-04-13 133426.png>)
+### ✅ 2. Page Tracking
+
+curl /page-metrics
+
+Expected:
+✔ views  
+✔ clicks  
+✔ avg_time_spent  
+
+---
+
+### ✅ 3. Context Tracking
+
+curl /user-context
+
+Expected:
+✔ device  
+✔ region  
+✔ source  
+
+---
+
+### ✅ 4. Infra Failure
+
+kubectl delete pod web1-blue
+
+curl /signals/stream
+
+Expected:
+✔ pod_crash  
+✔ restart_count  
+
+---
+
+### ✅ 5. Streaming (CRITICAL)
+
+curl /signals/stream
+
+Expected:
+✔ continuous output  
+✔ includes signals + correlation  
+
+---
+
+### ❌ Failure Scenarios
+
+| Test | Expected |
+|-----|--------|
+| empty user_id | rejected |
+| invalid signal | validation error |
+| wrong metric | rejected |
+| duplicate signals | removed |
+
+---
+
+## 🔹 PASS Criteria
+
+✔ real events captured  
+✔ valid schema  
+✔ correct metrics  
+✔ trace continuity  
+✔ correlation present  
+✔ streaming working  
+
+---
+
+## 🔹 FAIL Criteria
+
+❌ missing fields  
+❌ wrong mapping  
+❌ invalid schema  
+❌ no trace  
+❌ stream broken  
+
+---
+
+## 🎯 Final Goal
+
+System must be:
+
+deterministic  
+structured  
+validated  
+traceable  
+real-time  
