@@ -50,7 +50,7 @@ def track_event():
 
 
 # =========================
-# PHASE 2 — USER METRICS
+# PHASE 2 — USER METRICS (UPDATED WITH SESSION)
 # =========================
 def compute_user_metrics():
     users = set()
@@ -59,23 +59,37 @@ def compute_user_metrics():
     login_count = defaultdict(int)
     user_activity = defaultdict(int)
 
+    session_start = {}
+    session_end = {}
+
     now = int(time.time())
 
     for event in user_events:
         u = event["user_id"]
+        s = event["session_id"]
+
         users.add(u)
 
         if now - event["timestamp"] < 600:
             active_users.add(u)
 
-        user_sessions[u].add(event["session_id"])
+        user_sessions[u].add(s)
         user_activity[u] += 1
 
         if event["event_type"] == "user_login":
             login_count[u] += 1
 
+        # 🔥 SESSION TRACKING
+        if event["event_type"] == "session_start":
+            session_start[s] = event["timestamp"]
+
+        if event["event_type"] == "session_end":
+            session_end[s] = event["timestamp"]
+
+    # returning users
     returning_users = [u for u in user_sessions if len(user_sessions[u]) > 1]
 
+    # login frequency
     freq = {"2+":0,"5+":0,"10+":0,"15+":0,"100+":0}
     for u,c in login_count.items():
         if c>=2: freq["2+"]+=1
@@ -84,6 +98,14 @@ def compute_user_metrics():
         if c>=15: freq["15+"]+=1
         if c>=100: freq["100+"]+=1
 
+    # session duration
+    durations = []
+    for s in session_start:
+        if s in session_end:
+            durations.append(session_end[s] - session_start[s])
+
+    avg_session_time = sum(durations)//len(durations) if durations else 0
+
     most_active = sorted(user_activity.items(), key=lambda x:x[1], reverse=True)[:3]
 
     return {
@@ -91,7 +113,8 @@ def compute_user_metrics():
         "active_users": len(active_users),
         "returning_users": len(returning_users),
         "login_frequency": freq,
-        "most_active_users": most_active
+        "most_active_users": most_active,
+        "avg_session_duration": avg_session_time
     }
 
 
@@ -196,21 +219,37 @@ def aggregate():
 
 
 # =========================
-# PHASE 6 — SUMMARY
+# PHASE 6 — SUMMARY (REAL DATA)
 # =========================
 def compute_summary():
     m = compute_user_metrics()
     p = compute_page_metrics()
 
-    growth = "increasing" if m["total_users"]>1 else "stable"
-    engagement = "high" if m["active_users"]>1 else "low"
-    most_page = max(p["views"], key=p["views"].get) if p["views"] else "unknown"
+    if m["total_users"] >= 3:
+        growth = "increasing"
+    else:
+        growth = "stable"
+
+    if m["active_users"] >= 2:
+        engagement = "high"
+    else:
+        engagement = "low"
+
+    if p["views"]:
+        most_page = max(p["views"], key=p["views"].get)
+    else:
+        most_page = "unknown"
+
+    if p["views"] and p["clicks"]:
+        drop_off = "low" if sum(p["clicks"].values()) > 2 else "high"
+    else:
+        drop_off = "unknown"
 
     return {
         "user_growth": growth,
         "engagement_level": engagement,
         "most_active_area": most_page,
-        "drop_off_area": "unknown"
+        "drop_off_area": drop_off
     }
 
 
@@ -220,7 +259,7 @@ def summary():
 
 
 # =========================
-# SIGNAL SYSTEM (FIXED)
+# SIGNAL SYSTEM
 # =========================
 def generate_all_signals(trace_id, latency, error_rate):
     deployment_status = get_deployment_status()["status"]
@@ -235,7 +274,7 @@ def generate_all_signals(trace_id, latency, error_rate):
 
 
 # =========================
-# CORRELATION (NEW)
+# CORRELATION
 # =========================
 def correlate_all(trace_id):
     return {
@@ -246,7 +285,7 @@ def correlate_all(trace_id):
 
 
 # =========================
-# STREAM (FINAL)
+# STREAM
 # =========================
 last_input={"trace_id":"stream-1","latency":0,"error_rate":0}
 

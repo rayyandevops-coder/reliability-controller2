@@ -1,38 +1,13 @@
+# TESTING HANDOFF — PRAVAH
 
 ---
 
-# 📄 ✅ TESTING_HANDOFF.md (FINAL)
-
-```md
-# TESTING HANDOFF — PRAVAH SYSTEM
-
----
-
-## 🔹 How to Run
-
-1. Deploy system:
+## 🔹 Run System
 
 kubectl apply -f k8s/
 
-2. Get Node IP:
-
-kubectl get nodes -o wide
-
-3. Access Monitor:
-
+Access:
 http://54.156.236.10:30004
-
----
-
-## 🔹 Endpoints
-
-GET /health  
-GET /user-metrics  
-GET /page-metrics  
-GET /user-context  
-GET /aggregate  
-GET /summary  
-GET /signals/stream  
 
 ---
 
@@ -40,105 +15,87 @@ GET /signals/stream
 
 ---
 
-### ✅ 1. User Flow
+### ✅ 1. User Activity
 
 Steps:
-- Open web1/web2
-- Login
-- Click button
+
+* Login (rayyan, test1)
+* Click multiple times
 
 Check:
 
-curl /user-metrics
+curl http://54.156.236.10:30004/user-metrics
 
 Expected:
-✔ users count increases  
-✔ activity tracked  
+
+✔ active_users = 2
+✔ total_users = 2
+✔ activity counts updated
 
 ---
 
-### ✅ 2. Page Tracking
+### ✅ 2. Summary
 
-curl /page-metrics
+curl http://54.156.236.10:30004/summary
 
 Expected:
-✔ views  
-✔ clicks  
-✔ avg_time_spent  
+
+✔ engagement_level = high
+✔ drop_off_area = low
 
 ---
 
-### ✅ 3. Context Tracking
+### ✅ 3. Streaming (CRITICAL)
 
-curl /user-context
+curl http://54.156.236.10:30004/signals/stream
 
 Expected:
-✔ device  
-✔ region  
-✔ source  
+
+✔ continuous stream
+✔ includes:
+
+* pod_crash
+* execution_failure
+* deployment_success
+
+✔ includes correlation
 
 ---
 
-### ✅ 4. Infra Failure
+### ❌ Failure Cases
 
-kubectl delete pod web1-blue
-
-curl /signals/stream
-
-Expected:
-✔ pod_crash  
-✔ restart_count  
-
----
-
-### ✅ 5. Streaming (CRITICAL)
-
-curl /signals/stream
-
-Expected:
-✔ continuous output  
-✔ includes signals + correlation  
-
----
-
-### ❌ Failure Scenarios
-
-| Test | Expected |
-|-----|--------|
-| empty user_id | rejected |
-| invalid signal | validation error |
-| wrong metric | rejected |
-| duplicate signals | removed |
+| Test           | Expected |
+| -------------- | -------- |
+| empty user_id  | rejected |
+| missing fields | error    |
+| invalid metric | rejected |
 
 ---
 
 ## 🔹 PASS Criteria
 
-✔ real events captured  
-✔ valid schema  
-✔ correct metrics  
-✔ trace continuity  
-✔ correlation present  
-✔ streaming working  
+✔ real user data present
+✔ correct summary
+✔ valid signals
+✔ correlation working
+✔ streaming active
 
 ---
 
 ## 🔹 FAIL Criteria
 
-❌ missing fields  
-❌ wrong mapping  
-❌ invalid schema  
-❌ no trace  
-❌ stream broken  
+❌ zero users
+❌ static summary
+❌ missing signals
+❌ no correlation
 
 ---
 
-## 🎯 Final Goal
+## 🎯 Goal
 
 System must be:
 
-deterministic  
-structured  
-validated  
-traceable  
-real-time  
+deterministic
+validated
+real-data driven
+traceable
