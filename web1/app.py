@@ -1,29 +1,17 @@
 from flask import Flask, request, render_template_string, redirect
 import requests
 import time
+import uuid
 
 app = Flask(__name__)
 
 MONITOR_URL = "http://monitor-service:5004/track-event"
 
-current_user = {"user_id": None, "session_id": None}
-
-
-def get_device():
-    ua = request.headers.get("User-Agent", "").lower()
-    if "mobile" in ua:
-        return "mobile"
-    elif "windows" in ua or "linux" in ua:
-        return "desktop"
-    return "unknown"
-
-
-def get_region():
-    ip = request.remote_addr
-    if ip.startswith(("192.", "172.", "127.")):
-        return "local"
-    return "external"
-
+current_user = {
+    "user_id": None,
+    "session_id": None,
+    "trace_id": None
+}
 
 login_page = """
 <h2>Login</h2>
@@ -32,7 +20,6 @@ User ID: <input name="user_id"><br><br>
 <button type="submit">Login</button>
 </form>
 """
-
 
 dashboard_page = """
 <h2>Dashboard</h2>
@@ -60,43 +47,27 @@ def login():
         return "Invalid user", 400
 
     session_id = f"s_{int(time.time())}"
+    trace_id = str(uuid.uuid4())
 
     current_user["user_id"] = user_id
     current_user["session_id"] = session_id
+    current_user["trace_id"] = trace_id
 
-    meta = {
-        "page": "dashboard",
-        "device": get_device(),
-        "region": get_region(),
-        "source": "web1"  # change to web2 in web2
-    }
+    meta = {"page": "dashboard", "source": "web1"}
 
-    # 🔥 SESSION START
-    requests.post(MONITOR_URL, json={
-        "user_id": user_id,
-        "event_type": "session_start",
-        "timestamp": int(time.time()),
-        "session_id": session_id,
-        "metadata": meta
-    })
+    def send(event):
+        requests.post(MONITOR_URL, json={
+            "user_id": user_id,
+            "event_type": event,
+            "timestamp": int(time.time()),
+            "session_id": session_id,
+            "trace_id": trace_id,
+            "metadata": meta
+        }, timeout=3)
 
-    # LOGIN
-    requests.post(MONITOR_URL, json={
-        "user_id": user_id,
-        "event_type": "user_login",
-        "timestamp": int(time.time()),
-        "session_id": session_id,
-        "metadata": meta
-    })
-
-    # PAGE VIEW
-    requests.post(MONITOR_URL, json={
-        "user_id": user_id,
-        "event_type": "page_view",
-        "timestamp": int(time.time()),
-        "session_id": session_id,
-        "metadata": meta
-    })
+    send("session_start")
+    send("user_login")
+    send("page_view")
 
     return render_template_string(dashboard_page, user_id=user_id)
 
@@ -104,21 +75,14 @@ def login():
 @app.route("/click", methods=["POST"])
 def click():
     if current_user["user_id"]:
-        meta = {
-            "page": "dashboard",
-            "device": get_device(),
-            "region": get_region(),
-            "source": "web1",
-            "button": "main"
-        }
-
         requests.post(MONITOR_URL, json={
             "user_id": current_user["user_id"],
             "event_type": "interaction_click",
             "timestamp": int(time.time()),
             "session_id": current_user["session_id"],
-            "metadata": meta
-        })
+            "trace_id": current_user["trace_id"],
+            "metadata": {"page": "dashboard", "source": "web1"}
+        }, timeout=3)
 
     return "Clicked!"
 
@@ -131,19 +95,15 @@ def logout():
             "event_type": "session_end",
             "timestamp": int(time.time()),
             "session_id": current_user["session_id"],
+            "trace_id": current_user["trace_id"],
             "metadata": {}
-        })
-
-    current_user["user_id"] = None
-    current_user["session_id"] = None
+        }, timeout=3)
 
     return redirect("/")
 
-
 @app.route("/health")
 def health():
-    return "ok"
-
+    return {"status": "ok"}
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5001)  # web2 → 5002
+    app.run(host="0.0.0.0", port=5001)

@@ -1,102 +1,114 @@
-# PRAVAH — User + System Observability Layer
-
----
+# PRAVAH — Full System Observability (Pre-Integration Lock)
 
 ## 🚀 Overview
 
-PRAVAH is a deterministic observability system that captures:
+PRAVAH is a deterministic observability pipeline that captures real system behavior across:
 
-* Infrastructure signals (Kubernetes)
-* User behavior (login, click, session tracking)
-* Usage metrics (activity, sessions)
-* Real-time streaming output
+- User events
+- Application signals
+- Infrastructure events
+- Execution layer
 
-It does NOT perform decision-making — only structured observability.
+This phase proves:
 
----
-
-## 🧠 Architecture
-
-User → Web (web1/web2) → Event Tracking
-→ Monitor → Metrics + Signals
-→ Aggregation → Correlation → Streaming
+→ full trace continuity  
+→ real user observability  
+→ multi-layer signal correlation  
 
 ---
 
-## ⚙️ Features
+## 🎯 Objective
 
-✔ User tracking (login, click, session_start/end)
-✔ Metrics engine (users, activity, session duration)
-✔ Page tracking (views, clicks, time spent)
-✔ Context tracking (device, region, source)
-✔ Infra + CI/CD + Execution signals
-✔ Correlation layer (trace-based grouping)
-✔ Real-time streaming
+- Capture real user events
+- Maintain trace continuity across system
+- Aggregate signals across services
+- Stream unified output
 
 ---
 
-## 📊 Real Output (PROOF)
+## 🧠 System Flow
 
-### 🔹 User Metrics
+User → Session → Trace  
+↓  
+Event Tracking  
+↓  
+Signal Generation  
+↓  
+Aggregation  
+↓  
+Correlation  
+↓  
+Streaming  
+
+---
+
+## 📊 Real User Event (Proof)
 
 ```json
 {
-  "active_users": 2,
-  "avg_session_duration": 0,
-  "most_active_users": [["rayyan",8],["test1",7]],
-  "total_users": 2
+  "user_id": "rayyan",
+  "event_type": "user_login",
+  "timestamp": 1776339877,
+  "session_id": "s_1776339877",
+  "trace_id": "4d2e21fa-77ff-4d81-a07d-37ca2b88c091"
 }
-```
-
----
-
-### 🔹 Summary
-
-```json
+📊 Sample Stream Output (REAL)
 {
-  "summary": {
-    "drop_off_area": "low",
-    "engagement_level": "high",
-    "most_active_area": "dashboard",
-    "user_growth": "stable"
-  }
-}
-```
-
----
-
-### 🔹 Stream Output
-
-```json
-{
-  "trace_id": "stream-1",
+  "trace_id": "4d2e21fa-77ff-4d81-a07d-37ca2b88c091",
   "signals": [
-    {"signal_type": "pod_crash", "metric": "restart_count"},
-    {"signal_type": "execution_failure"},
-    {"signal_type": "deployment_success"}
+    {
+      "signal_type": "latency_spike",
+      "severity": "CRITICAL",
+      "service": "application"
+    },
+    {
+      "signal_type": "error_spike",
+      "severity": "CRITICAL",
+      "service": "application"
+    },
+    {
+      "signal_type": "deployment_success",
+      "service": "cicd"
+    },
+    {
+      "signal_type": "pod_crash",
+      "service": "kubernetes"
+    },
+    {
+      "signal_type": "execution_failure",
+      "service": "executer"
+    }
   ],
   "correlation": {
-    "aggregate": {...},
-    "summary": {...}
+    "trace_id": "4d2e21fa-77ff-4d81-a07d-37ca2b88c091",
+    "user_events": [
+      "session_start",
+      "user_login",
+      "page_view",
+      "interaction_click",
+      "session_end"
+    ]
   }
 }
-```
+📊 Metrics Output (REAL)
+{
+  "active_users": 1,
+  "avg_session_duration": 24,
+  "most_active_users": [["rayyan",15]],
+  "total_users": 1
+}
+📊 Summary Output (REAL)
+{
+  "active_users": 1,
+  "top_page": "dashboard",
+  "total_clicks": 8,
+  "total_users": 1
+}
+🎯 Final Outcome
 
----
+✔ real user tracking
+✔ trace continuity across system
+✔ multi-service signal aggregation
+✔ deterministic structured output
 
-## 🚫 Constraints Followed
-
-* No execution logic
-* No decision-making
-* No personalization
-* Deterministic outputs only
-
----
-
-## 🏁 Outcome
-
-PRAVAH provides:
-
-✔ Infra + User + Usage observability
-✔ Real-time validated system
-✔ Trace-based correlation
+PRAVAH is ready for integration.

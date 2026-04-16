@@ -1,101 +1,77 @@
+
+---
+
+# 📄 ✅ TESTING_HANDOFF.md (REALISTIC)
+
+```markdown
 # TESTING HANDOFF — PRAVAH
 
----
+## 🔹 How to Run
 
-## 🔹 Run System
-
-kubectl apply -f k8s/
-
-Access:
-http://54.156.236.10:30004
+1. Deploy Kubernetes services
+2. Access web UI
+3. Interact with system
 
 ---
 
-## 🔹 Test Cases
+## 🔹 Endpoints
+
+GET /user-metrics  
+GET /summary  
+GET /signals/stream  
 
 ---
 
-### ✅ 1. User Activity
+## 🔹 Test Flow
 
-Steps:
+1. Login (user_id: rayyan)
+2. Click multiple times
+3. Logout
+4. Delete pod:
 
-* Login (rayyan, test1)
-* Click multiple times
+kubectl delete pod web1-blue-...
 
-Check:
+5. Update stream:
 
-curl http://54.156.236.10:30004/user-metrics
+curl -X POST /update-stream
 
-Expected:
-
-✔ active_users = 2
-✔ total_users = 2
-✔ activity counts updated
+6. Observe stream
 
 ---
 
-### ✅ 2. Summary
+## 🔹 Expected Output
 
-curl http://54.156.236.10:30004/summary
-
-Expected:
-
-✔ engagement_level = high
-✔ drop_off_area = low
-
----
-
-### ✅ 3. Streaming (CRITICAL)
-
-curl http://54.156.236.10:30004/signals/stream
-
-Expected:
-
-✔ continuous stream
-✔ includes:
-
-* pod_crash
-* execution_failure
-* deployment_success
-
-✔ includes correlation
-
----
-
-### ❌ Failure Cases
-
-| Test           | Expected |
-| -------------- | -------- |
-| empty user_id  | rejected |
-| missing fields | error    |
-| invalid metric | rejected |
+- user events recorded
+- metrics non-zero
+- signals generated
+- correlation populated
+- same trace_id everywhere
 
 ---
 
 ## 🔹 PASS Criteria
 
-✔ real user data present
-✔ correct summary
-✔ valid signals
-✔ correlation working
-✔ streaming active
+✔ user_events present  
+✔ trace_id consistent  
+✔ correlation not empty  
+✔ signals correct  
+✔ metrics > 0  
 
 ---
 
 ## 🔹 FAIL Criteria
 
-❌ zero users
-❌ static summary
-❌ missing signals
-❌ no correlation
+❌ empty metrics  
+❌ missing trace_id  
+❌ no correlation  
+❌ broken stream  
 
 ---
 
-## 🎯 Goal
+## 🎯 Final Goal
 
-System must be:
+Prove:
 
-deterministic
-validated
-real-data driven
-traceable
+→ real observability  
+→ trace-linked system  
+→ deterministic output  

@@ -13,7 +13,6 @@ current_user = {
     "trace_id": None
 }
 
-
 login_page = """
 <h2>Login</h2>
 <form method="POST" action="/login">
@@ -54,37 +53,21 @@ def login():
     current_user["session_id"] = session_id
     current_user["trace_id"] = trace_id
 
-    meta = {"page": "dashboard", "source": "web1"}  # change for web2
+    meta = {"page": "dashboard", "source": "web1"}
 
-    # SESSION START
-    requests.post(MONITOR_URL, json={
-        "user_id": user_id,
-        "event_type": "session_start",
-        "timestamp": int(time.time()),
-        "session_id": session_id,
-        "trace_id": trace_id,
-        "metadata": meta
-    })
+    def send(event):
+        requests.post(MONITOR_URL, json={
+            "user_id": user_id,
+            "event_type": event,
+            "timestamp": int(time.time()),
+            "session_id": session_id,
+            "trace_id": trace_id,
+            "metadata": meta
+        }, timeout=3)
 
-    # LOGIN
-    requests.post(MONITOR_URL, json={
-        "user_id": user_id,
-        "event_type": "user_login",
-        "timestamp": int(time.time()),
-        "session_id": session_id,
-        "trace_id": trace_id,
-        "metadata": meta
-    })
-
-    # PAGE VIEW
-    requests.post(MONITOR_URL, json={
-        "user_id": user_id,
-        "event_type": "page_view",
-        "timestamp": int(time.time()),
-        "session_id": session_id,
-        "trace_id": trace_id,
-        "metadata": meta
-    })
+    send("session_start")
+    send("user_login")
+    send("page_view")
 
     return render_template_string(dashboard_page, user_id=user_id)
 
@@ -99,7 +82,7 @@ def click():
             "session_id": current_user["session_id"],
             "trace_id": current_user["trace_id"],
             "metadata": {"page": "dashboard", "source": "web1"}
-        })
+        }, timeout=3)
 
     return "Clicked!"
 
@@ -114,14 +97,13 @@ def logout():
             "session_id": current_user["session_id"],
             "trace_id": current_user["trace_id"],
             "metadata": {}
-        })
+        }, timeout=3)
 
     return redirect("/")
 
-
 @app.route("/health")
 def health():
-    return "ok"
+    return {"status": "ok"}
 
 
 if __name__ == "__main__":

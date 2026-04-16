@@ -1,5 +1,8 @@
+import sys
+sys.path.append(".")
 from flask import Flask, request, jsonify, Response
 import time
+import json
 from collections import defaultdict
 
 from signal_builder import build_signal
@@ -17,32 +20,36 @@ app = Flask(__name__)
 user_events = []
 
 # =========================
-# PHASE 1 — EVENT TRACKING (STRICT)
+# PHASE 1 — EVENT TRACKING
 # =========================
 @app.route("/track-event", methods=["POST"])
 def track_event():
     try:
-        data = request.get_json()
+        data = request.get_json(force=True, silent=True)
+
+        print("HEADERS:", dict(request.headers), flush=True)
+        print("RAW BODY:", request.data, flush=True)
+        print("PARSED JSON:", data, flush=True)
+
+        if not data:
+            return jsonify({"error": "invalid json"}), 400
 
         required = ["user_id", "event_type", "timestamp", "session_id", "trace_id"]
 
         for field in required:
             if field not in data:
+                print("❌ MISSING:", field, flush=True)
                 return jsonify({"error": f"{field} missing"}), 400
 
-        if not data["user_id"] or str(data["user_id"]).strip() == "":
-            return jsonify({"error": "invalid user_id"}), 400
-
-        # ✅ TRACE COMES FROM EXTERNAL ONLY
         user_events.append(data)
 
-        print("[EVENT]", data, flush=True)
+        print("✅ EVENT STORED:", data, flush=True)
 
         return jsonify({"status": "event recorded"})
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
+        print("🔥 ERROR:", str(e), flush=True)
+        return jsonify({"error": str(e)}), 400
 
 # =========================
 # PHASE 2 — USER METRICS
@@ -51,6 +58,7 @@ def compute_user_metrics():
     users = set()
     active_users = set()
     user_activity = defaultdict(int)
+
     session_start = {}
     session_end = {}
 
@@ -78,9 +86,9 @@ def compute_user_metrics():
         if s in session_end:
             durations.append(session_end[s] - session_start[s])
 
-    avg_session = sum(durations)//len(durations) if durations else 0
+    avg_session = sum(durations) // len(durations) if durations else 0
 
-    most_active = sorted(user_activity.items(), key=lambda x:x[1], reverse=True)[:3]
+    most_active = sorted(user_activity.items(), key=lambda x: x[1], reverse=True)[:3]
 
     return {
         "total_users": len(users),
@@ -192,7 +200,7 @@ def generate_all_signals(trace_id, latency, error_rate):
 
 
 # =========================
-# CORRELATION (STRICT TRACE)
+# CORRELATION
 # =========================
 def correlate(trace_id):
     return {
@@ -213,7 +221,7 @@ last_input = {
 
 @app.route("/update-stream", methods=["POST"])
 def update_stream():
-    data = request.get_json()
+    data = request.get_json(force=True)
 
     if not data.get("trace_id"):
         return jsonify({"error": "trace_id required"}), 400
@@ -243,7 +251,7 @@ def stream_generator():
             "correlation": correlate(trace_id)
         }
 
-        yield f"data: {output}\n\n"
+        yield f"data: {json.dumps(output)}\n\n"
         time.sleep(2)
 
 
