@@ -1,114 +1,109 @@
-# PRAVAH — Full System Observability (Pre-Integration Lock)
+# PRAVAH — Full Trace Completion + Real User Observability
 
-## 🚀 Overview
+## Overview
 
-PRAVAH is a deterministic observability pipeline that captures real system behavior across:
+Pravah is an observability layer that captures and correlates:
 
-- User events
-- Application signals
-- Infrastructure events
-- Execution layer
+- User behavior events
+- System signals (latency, errors)
+- CI/CD deployment signals
+- Execution layer signals
 
-This phase proves:
-
-→ full trace continuity  
-→ real user observability  
-→ multi-layer signal correlation  
+All data is linked using a **trace_id propagated from upstream (Core)**.
 
 ---
 
-## 🎯 Objective
+## Architecture
 
-- Capture real user events
-- Maintain trace continuity across system
-- Aggregate signals across services
-- Stream unified output
+Core (Trace Origin) → Web → Monitor (Pravah) → Signals → Stream
 
----
-
-## 🧠 System Flow
-
-User → Session → Trace  
-↓  
-Event Tracking  
-↓  
-Signal Generation  
-↓  
-Aggregation  
-↓  
-Correlation  
-↓  
-Streaming  
+- Trace ID is NOT generated inside Pravah
+- Trace ID is received externally (simulated via header)
+- Pravah only propagates and correlates
 
 ---
 
-## 📊 Real User Event (Proof)
+## Key Features
 
-```json
-{
-  "user_id": "rayyan",
-  "event_type": "user_login",
-  "timestamp": 1776339877,
-  "session_id": "s_1776339877",
-  "trace_id": "4d2e21fa-77ff-4d81-a07d-37ca2b88c091"
-}
-📊 Sample Stream Output (REAL)
-{
-  "trace_id": "4d2e21fa-77ff-4d81-a07d-37ca2b88c091",
-  "signals": [
-    {
-      "signal_type": "latency_spike",
-      "severity": "CRITICAL",
-      "service": "application"
-    },
-    {
-      "signal_type": "error_spike",
-      "severity": "CRITICAL",
-      "service": "application"
-    },
-    {
-      "signal_type": "deployment_success",
-      "service": "cicd"
-    },
-    {
-      "signal_type": "pod_crash",
-      "service": "kubernetes"
-    },
-    {
-      "signal_type": "execution_failure",
-      "service": "executer"
-    }
-  ],
-  "correlation": {
-    "trace_id": "4d2e21fa-77ff-4d81-a07d-37ca2b88c091",
-    "user_events": [
-      "session_start",
-      "user_login",
-      "page_view",
-      "interaction_click",
-      "session_end"
-    ]
-  }
-}
-📊 Metrics Output (REAL)
-{
-  "active_users": 1,
-  "avg_session_duration": 24,
-  "most_active_users": [["rayyan",15]],
-  "total_users": 1
-}
-📊 Summary Output (REAL)
-{
-  "active_users": 1,
-  "top_page": "dashboard",
-  "total_clicks": 8,
-  "total_users": 1
-}
-🎯 Final Outcome
+- Trace-based observability (strict)
+- Real user event ingestion
+- Multi-trace support
+- CI/CD signal integration
+- Deterministic summary (no inference)
+- Live streaming (SSE)
 
-✔ real user tracking
-✔ trace continuity across system
-✔ multi-service signal aggregation
-✔ deterministic structured output
+---
 
-PRAVAH is ready for integration.
+## Deployment
+
+- Dockerized microservices
+- Kubernetes (staging + prod)
+- Blue/Green deployment
+- CI/CD via GitHub Actions
+
+---
+
+## Real Execution Proof
+
+### 🔹 User Login
+curl -X POST http://54.156.236.10:30001/login
+
+-H "X-TRACE-ID: core-trace-001"
+-d "user_id=rayyan"
+
+
+---
+
+### 🔹 User Click
+
+
+curl -X POST http://54.156.236.10:30001/click
+
+-H "X-TRACE-ID: core-trace-001"
+-d "user_id=rayyan&session_id=s_123"
+
+
+---
+
+### 🔹 Signal Injection
+
+
+curl -X POST http://54.156.236.10:30004/update-stream
+
+-d '{"trace_id":"core-trace-001","latency":900,"error_rate":0.8}'
+
+
+---
+
+## 📊 Real Stream Output
+
+
+data: {
+"trace_id": "core-trace-001",
+"signals": [
+{"signal_type": "latency_spike", "value": 900},
+{"signal_type": "error_spike", "value": 0.8},
+{"signal_type": "deployment_success"},
+{"signal_type": "pod_crash"},
+{"signal_type": "execution_failure"}
+],
+"correlation": {
+"trace_id": "core-trace-001",
+"user_events": [
+{"event_type": "session_start"},
+{"event_type": "user_login"},
+{"event_type": "page_view"},
+{"event_type": "interaction_click"}
+]
+}
+}
+
+
+---
+
+## Summary
+
+- Trace continuity maintained across all layers
+- No internal trace generation
+- Real user + infra linkage proven
+- System ready for Core integration

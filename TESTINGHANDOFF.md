@@ -1,77 +1,78 @@
-
----
-
-# 📄 ✅ TESTING_HANDOFF.md (REALISTIC)
-
-```markdown
 # TESTING HANDOFF — PRAVAH
 
-## 🔹 How to Run
+## Objective
 
-1. Deploy Kubernetes services
-2. Access web UI
-3. Interact with system
+Validate full trace observability pipeline
 
 ---
 
-## 🔹 Endpoints
+## Step 1 — Login
 
-GET /user-metrics  
-GET /summary  
-GET /signals/stream  
 
----
+curl -X POST http://54.156.236.10:30001/login
 
-## 🔹 Test Flow
+-H "X-TRACE-ID: core-trace-001"
+-d "user_id=rayyan"
 
-1. Login (user_id: rayyan)
-2. Click multiple times
-3. Logout
-4. Delete pod:
-
-kubectl delete pod web1-blue-...
-
-5. Update stream:
-
-curl -X POST /update-stream
-
-6. Observe stream
 
 ---
 
-## 🔹 Expected Output
+## Step 2 — Interaction
 
-- user events recorded
-- metrics non-zero
-- signals generated
-- correlation populated
-- same trace_id everywhere
 
----
+curl -X POST http://54.156.236.10:30001/click
 
-## 🔹 PASS Criteria
+-H "X-TRACE-ID: core-trace-001"
+-d "user_id=rayyan&session_id=s_123"
 
-✔ user_events present  
-✔ trace_id consistent  
-✔ correlation not empty  
-✔ signals correct  
-✔ metrics > 0  
 
 ---
 
-## 🔹 FAIL Criteria
+## Step 3 — Inject Signal
 
-❌ empty metrics  
-❌ missing trace_id  
-❌ no correlation  
-❌ broken stream  
+
+curl -X POST http://54.156.236.10:30004/update-stream
+
+-d '{"trace_id":"core-trace-001","latency":900,"error_rate":0.8}'
+
 
 ---
 
-## 🎯 Final Goal
+## Step 4 — Stream
 
-Prove:
 
-→ real observability  
-→ trace-linked system  
-→ deterministic output  
+curl -N http://54.156.236.10:30004/signals/stream
+
+
+---
+
+## Expected Output
+
+- Same trace_id across:
+  - user events
+  - signals
+  - correlation
+- user_events NOT empty
+- signals include:
+  - latency_spike
+  - error_spike
+  - deployment_success
+  - pod_crash
+  - execution_failure
+
+---
+
+## Success Criteria
+
+✔ Trace continuity  
+✔ Real user event ingestion  
+✔ Signal correlation  
+✔ Streaming working  
+
+---
+
+## Notes
+
+- Trace ID is provided externally
+- Pravah does not generate trace_id
+- System is integration-ready with Core
