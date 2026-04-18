@@ -1,23 +1,17 @@
-from flask import Flask, request, render_template_string, redirect
+from flask import Flask, request, render_template_string
 import requests
 import time
-import uuid
 
 app = Flask(__name__)
 
 MONITOR_URL = "http://monitor-service:5004/track-event"
 
-current_user = {
-    "user_id": None,
-    "session_id": None,
-    "trace_id": None
-}
-
 login_page = """
 <h2>Login</h2>
 <form method="POST" action="/login">
-User ID: <input name="user_id"><br><br>
-<button type="submit">Login</button>
+  User ID: <input name="user_id"><br><br>
+  Trace ID: <input name="trace_id"><br><br>
+  <button type="submit">Login</button>
 </form>
 """
 
@@ -26,13 +20,19 @@ dashboard_page = """
 <p>Welcome {{user_id}}</p>
 
 <form method="POST" action="/click">
-<button type="submit">Click</button>
+  <input type="hidden" name="user_id" value="{{user_id}}">
+  <input type="hidden" name="trace_id" value="{{trace_id}}">
+  <input type="hidden" name="session_id" value="{{session_id}}">
+  <button type="submit">Click</button>
 </form>
 
-<br>
-<a href="/logout">Logout</a>
+<form method="POST" action="/logout">
+  <input type="hidden" name="user_id" value="{{user_id}}">
+  <input type="hidden" name="trace_id" value="{{trace_id}}">
+  <input type="hidden" name="session_id" value="{{session_id}}">
+  <button type="submit">Logout</button>
+</form>
 """
-
 
 @app.route("/")
 def home():
@@ -41,69 +41,72 @@ def home():
 
 @app.route("/login", methods=["POST"])
 def login():
-    user_id = request.form["user_id"].strip()
+    user_id = request.form.get("user_id")
 
-    if not user_id:
-        return "Invalid user", 400
+    # 🔥 FIX: header + form support
+    trace_id = request.headers.get("X-TRACE-ID") or request.form.get("trace_id")
+
+    if not user_id or not trace_id:
+        return "user_id and trace_id required", 400
 
     session_id = f"s_{int(time.time())}"
-    trace_id = str(uuid.uuid4())
 
-    current_user["user_id"] = user_id
-    current_user["session_id"] = session_id
-    current_user["trace_id"] = trace_id
+    events = ["session_start", "user_login", "page_view"]
 
-    meta = {"page": "dashboard", "source": "web1"}
-
-    def send(event):
+    for e in events:
         requests.post(MONITOR_URL, json={
             "user_id": user_id,
-            "event_type": event,
+            "event_type": e,
             "timestamp": int(time.time()),
             "session_id": session_id,
             "trace_id": trace_id,
-            "metadata": meta
-        }, timeout=3)
+            "metadata": {"page": "dashboard", "source": "web"}
+        })
 
-    send("session_start")
-    send("user_login")
-    send("page_view")
-
-    return render_template_string(dashboard_page, user_id=user_id)
+    return render_template_string(
+        dashboard_page,
+        user_id=user_id,
+        trace_id=trace_id,
+        session_id=session_id
+    )
 
 
 @app.route("/click", methods=["POST"])
 def click():
-    if current_user["user_id"]:
-        requests.post(MONITOR_URL, json={
-            "user_id": current_user["user_id"],
-            "event_type": "interaction_click",
-            "timestamp": int(time.time()),
-            "session_id": current_user["session_id"],
-            "trace_id": current_user["trace_id"],
-            "metadata": {"page": "dashboard", "source": "web1"}
-        }, timeout=3)
+    trace_id = request.headers.get("X-TRACE-ID") or request.form.get("trace_id")
 
-    return "Clicked!"
+    requests.post(MONITOR_URL, json={
+        "user_id": request.form.get("user_id"),
+        "event_type": "interaction_click",
+        "timestamp": int(time.time()),
+        "session_id": request.form.get("session_id"),
+        "trace_id": trace_id,
+        "metadata": {"page": "dashboard", "source": "web"}
+    })
+
+    return "clicked"
 
 
-@app.route("/logout")
+@app.route("/logout", methods=["POST"])
 def logout():
-    if current_user["user_id"]:
-        requests.post(MONITOR_URL, json={
-            "user_id": current_user["user_id"],
-            "event_type": "session_end",
-            "timestamp": int(time.time()),
-            "session_id": current_user["session_id"],
-            "trace_id": current_user["trace_id"],
-            "metadata": {}
-        }, timeout=3)
+    trace_id = request.headers.get("X-TRACE-ID") or request.form.get("trace_id")
 
-    return redirect("/")
+    requests.post(MONITOR_URL, json={
+        "user_id": request.form.get("user_id"),
+        "event_type": "session_end",
+        "timestamp": int(time.time()),
+        "session_id": request.form.get("session_id"),
+        "trace_id": trace_id,
+        "metadata": {}
+    })
+
+    return "logout"
+
 
 @app.route("/health")
 def health():
     return {"status": "ok"}
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5001)

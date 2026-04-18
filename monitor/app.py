@@ -1,5 +1,6 @@
 import sys
 sys.path.append(".")
+
 from flask import Flask, request, jsonify, Response
 import time
 import json
@@ -20,44 +21,33 @@ app = Flask(__name__)
 user_events = []
 
 # =========================
-# PHASE 1 — EVENT TRACKING
+# EVENT TRACKING (STRICT)
 # =========================
 @app.route("/track-event", methods=["POST"])
 def track_event():
-    try:
-        data = request.get_json(force=True, silent=True)
+    data = request.get_json(force=True, silent=True) or {}
 
-        print("HEADERS:", dict(request.headers), flush=True)
-        print("RAW BODY:", request.data, flush=True)
-        print("PARSED JSON:", data, flush=True)
+    required = ["user_id", "event_type", "timestamp", "session_id", "trace_id"]
 
-        if not data:
-            return jsonify({"error": "invalid json"}), 400
+    for field in required:
+        if field not in data:
+            return jsonify({"error": f"{field} missing"}), 400
 
-        required = ["user_id", "event_type", "timestamp", "session_id", "trace_id"]
+    user_events.append(data)
 
-        for field in required:
-            if field not in data:
-                print("❌ MISSING:", field, flush=True)
-                return jsonify({"error": f"{field} missing"}), 400
+    print("[EVENT OK]", data, flush=True)
 
-        user_events.append(data)
+    return jsonify({"status": "event recorded"})
 
-        print("✅ EVENT STORED:", data, flush=True)
-
-        return jsonify({"status": "event recorded"})
-
-    except Exception as e:
-        print("🔥 ERROR:", str(e), flush=True)
-        return jsonify({"error": str(e)}), 400
 
 # =========================
-# PHASE 2 — USER METRICS
+# USER METRICS
 # =========================
 def compute_user_metrics():
     users = set()
     active_users = set()
     user_activity = defaultdict(int)
+    login_counts = defaultdict(int)
 
     session_start = {}
     session_end = {}
@@ -75,6 +65,9 @@ def compute_user_metrics():
 
         user_activity[u] += 1
 
+        if e["event_type"] == "user_login":
+            login_counts[u] += 1
+
         if e["event_type"] == "session_start":
             session_start[s] = e["timestamp"]
 
@@ -90,11 +83,19 @@ def compute_user_metrics():
 
     most_active = sorted(user_activity.items(), key=lambda x: x[1], reverse=True)[:3]
 
+    # login frequency buckets
+    freq = {"2+": 0, "5+": 0, "10+": 0}
+    for u, c in login_counts.items():
+        if c >= 2: freq["2+"] += 1
+        if c >= 5: freq["5+"] += 1
+        if c >= 10: freq["10+"] += 1
+
     return {
         "total_users": len(users),
         "active_users": len(active_users),
         "most_active_users": most_active,
-        "avg_session_duration": avg_session
+        "avg_session_duration": avg_session,
+        "login_frequency": freq
     }
 
 
@@ -104,7 +105,7 @@ def user_metrics():
 
 
 # =========================
-# PHASE 3 — PAGE METRICS
+# PAGE METRICS
 # =========================
 def compute_page_metrics():
     views = {}
@@ -119,10 +120,7 @@ def compute_page_metrics():
         if e["event_type"] == "interaction_click":
             clicks[page] = clicks.get(page, 0) + 1
 
-    return {
-        "views": views,
-        "clicks": clicks
-    }
+    return {"views": views, "clicks": clicks}
 
 
 @app.route("/page-metrics")
@@ -131,38 +129,7 @@ def page_metrics():
 
 
 # =========================
-# PHASE 4 — CONTEXT
-# =========================
-def compute_context():
-    regions = {}
-    devices = {}
-    sources = {}
-
-    for e in user_events:
-        m = e.get("metadata", {})
-
-        r = m.get("region", "unknown")
-        d = m.get("device", "unknown")
-        s = m.get("source", "web")
-
-        regions[r] = regions.get(r, 0) + 1
-        devices[d] = devices.get(d, 0) + 1
-        sources[s] = sources.get(s, 0) + 1
-
-    return {
-        "regions": regions,
-        "devices": devices,
-        "sources": sources
-    }
-
-
-@app.route("/user-context")
-def user_context():
-    return jsonify(compute_context())
-
-
-# =========================
-# PHASE 5 — STRICT SUMMARY
+# SUMMARY (STRICT)
 # =========================
 def compute_summary():
     m = compute_user_metrics()
@@ -172,7 +139,7 @@ def compute_summary():
         "total_users": m["total_users"],
         "active_users": m["active_users"],
         "top_page": max(p["views"], key=p["views"].get) if p["views"] else None,
-        "total_clicks": sum(p["clicks"].values()) if p["clicks"] else 0
+        "avg_session_time": m["avg_session_duration"]
     }
 
 
@@ -182,7 +149,7 @@ def summary():
 
 
 # =========================
-# SIGNAL SYSTEM
+# SIGNALS
 # =========================
 def generate_all_signals(trace_id, latency, error_rate):
     deployment_status = get_deployment_status()["status"]
@@ -200,7 +167,7 @@ def generate_all_signals(trace_id, latency, error_rate):
 
 
 # =========================
-# CORRELATION
+# CORRELATION (STRICT TRACE)
 # =========================
 def correlate(trace_id):
     return {
@@ -210,48 +177,44 @@ def correlate(trace_id):
 
 
 # =========================
-# STREAM
+# STREAM (MULTI TRACE SAFE)
 # =========================
-last_input = {
-    "trace_id": None,
-    "latency": 0,
-    "error_rate": 0
-}
-
+last_inputs = {}
 
 @app.route("/update-stream", methods=["POST"])
 def update_stream():
     data = request.get_json(force=True)
 
-    if not data.get("trace_id"):
+    trace_id = data.get("trace_id")
+    if not trace_id:
         return jsonify({"error": "trace_id required"}), 400
 
-    last_input.update(data)
+    last_inputs[trace_id] = {
+        "latency": data.get("latency", 0),
+        "error_rate": data.get("error_rate", 0)
+    }
 
     return jsonify({"status": "updated"})
 
 
 def stream_generator():
     while True:
-        trace_id = last_input["trace_id"]
+        for trace_id, values in last_inputs.items():
 
-        if not trace_id:
-            time.sleep(2)
-            continue
+            signals = generate_all_signals(
+                trace_id,
+                values["latency"],
+                values["error_rate"]
+            )
 
-        signals = generate_all_signals(
-            trace_id,
-            last_input["latency"],
-            last_input["error_rate"]
-        )
+            output = {
+                "trace_id": trace_id,
+                "signals": signals,
+                "correlation": correlate(trace_id)
+            }
 
-        output = {
-            "trace_id": trace_id,
-            "signals": signals,
-            "correlation": correlate(trace_id)
-        }
+            yield f"data: {json.dumps(output)}\n\n"
 
-        yield f"data: {json.dumps(output)}\n\n"
         time.sleep(2)
 
 
