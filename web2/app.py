@@ -43,11 +43,13 @@ def home():
 def login():
     user_id = request.form.get("user_id")
 
-    # 🔥 FIX: header + form support
+    # 🔥 CORE TRACE ENTRY (MANDATORY PROOF)
     trace_id = request.headers.get("X-TRACE-ID") or request.form.get("trace_id")
 
     if not user_id or not trace_id:
         return "user_id and trace_id required", 400
+
+    print(f"[CORE TRACE RECEIVED] trace_id={trace_id}", flush=True)
 
     session_id = f"s_{int(time.time())}"
 
@@ -60,7 +62,7 @@ def login():
             "timestamp": int(time.time()),
             "session_id": session_id,
             "trace_id": trace_id,
-            "metadata": {"page": "dashboard", "source": "web"}
+            "metadata": {"page": "dashboard", "source": "web1"}
         })
 
     return render_template_string(
@@ -81,7 +83,7 @@ def click():
         "timestamp": int(time.time()),
         "session_id": request.form.get("session_id"),
         "trace_id": trace_id,
-        "metadata": {"page": "dashboard", "source": "web"}
+        "metadata": {"page": "dashboard", "source": "web1"}
     })
 
     return "clicked"

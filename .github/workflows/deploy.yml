@@ -10,7 +10,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    # 🔹 Checkout
     - uses: actions/checkout@v5
+
+    # 🔹 TRACE ID (CI/CD ORIGIN)
+    - name: Generate Trace ID
+      run: |
+        TRACE_ID=ci-${{ github.run_id }}
+        echo "TRACE_ID=$TRACE_ID" >> $GITHUB_ENV
+        echo "🚀 TRACE_ID=$TRACE_ID"
 
     # 🔐 Docker Login
     - name: Login DockerHub
@@ -18,7 +26,7 @@ jobs:
         echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
     # 🐳 Build & Push
-    - name: Build & Push
+    - name: Build & Push Images
       run: |
         docker build -t ${{ secrets.DOCKER_USERNAME }}/monitor-service:latest ./monitor
         docker build -t ${{ secrets.DOCKER_USERNAME }}/executer-service:latest ./executer
@@ -64,9 +72,10 @@ jobs:
         kubectl delete pod curl-test --ignore-not-found -n staging
         kubectl run curl-test --image=curlimages/curl --restart=Never -n staging -- sleep 60
         kubectl wait --for=condition=Ready pod/curl-test -n staging --timeout=30s
-         
+        
         kubectl exec -n staging curl-test -- \
-           curl -f http://monitor-staging-service:5004/health
+          curl -f http://monitor-staging-service:5004/health
+        
         kubectl delete pod curl-test -n staging
 
     # =========================
@@ -111,6 +120,22 @@ jobs:
         kubectl patch service web2-service -n prod -p '{"spec":{"selector":{"app":"web2","version":"green"}}}'
 
     # =========================
+    # 📡 CI/CD TRACE → PRAVAH (CRITICAL STEP)
+    # =========================
+    - name: Send CI/CD Trace to Monitor
+      run: |
+        kubectl delete pod curl-ci --ignore-not-found -n prod
+        kubectl run curl-ci --image=curlimages/curl --restart=Never -n prod -- sleep 30
+        kubectl wait --for=condition=Ready pod/curl-ci -n prod --timeout=30s
+
+        kubectl exec -n prod curl-ci -- \
+          curl -X POST http://monitor-service:5004/update-stream \
+          -H "Content-Type: application/json" \
+          -d "{\"trace_id\":\"$TRACE_ID\",\"latency\":250,\"error_rate\":0.05}"
+
+        kubectl delete pod curl-ci -n prod
+
+    # =========================
     # 🔍 STATUS
     # =========================
     - name: Status
@@ -126,9 +151,11 @@ jobs:
         kubectl delete pod curl-test --ignore-not-found -n prod
         kubectl run curl-test --image=curlimages/curl --restart=Never -n prod -- sleep 60
         kubectl wait --for=condition=Ready pod/curl-test -n prod --timeout=30s
+
         kubectl exec -n prod curl-test -- \
           curl -f http://monitor-service:5004/health
+
         kubectl delete pod curl-test -n prod
-        
+
     - name: Done
       run: echo "🚀 FULL DEPLOYMENT SUCCESS"

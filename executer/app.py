@@ -1,50 +1,86 @@
 from flask import Flask, request, jsonify
 import uuid
 import time
+import requests
+import os
 
 from governance import validate_deployment_request
 from core import execute_action, verify_deployment
 from bucket import log_event
 from outcome import record_outcome
+from mitra import calculate_score
 
 app = Flask(__name__)
 
-VALID_ACTIONS = {"restart", "scale_up", "scale_down", "noop"}
+SARATHI_URL = os.getenv("SARATHI_URL", "http://sarathi-service:5001/decision")
 
 
 @app.route("/execute-action", methods=["POST"])
 def execute():
-    data = request.get_json()
+    data = request.get_json(force=True)
 
     service_id = data.get("service_id")
     action = data.get("action")
-    decision = data.get("decision")   # decision comes from Sarathi
     metrics = data.get("metrics", {})
 
-    trace_id = data.get("trace_id", str(uuid.uuid4()))
+    # 🔥 STRICT TRACE CONTINUITY
+    trace_id = data.get("trace_id")
+    if not trace_id:
+        return jsonify({"error": "trace_id required"}), 400
 
     if not service_id or not action:
         return jsonify({"error": "missing fields"}), 400
 
-    # STAGE 1 — DECISION RECEIVED
+    print(f"[EXECUTION START] trace_id={trace_id} service={service_id} action={action}", flush=True)
+
+    # =========================
+    # 🔹 STEP 1 — MITRA SCORE
+    # =========================
+    score_data = calculate_score(metrics)
+
+    log_event(trace_id, "mitra_score", score_data)
+
+    # =========================
+    # 🔹 STEP 2 — SARATHI DECISION
+    # =========================
+    try:
+        sarathi_res = requests.post(
+            SARATHI_URL,
+            json={
+                "trace_id": trace_id,
+                "action_type": action,
+                "payload": score_data
+            },
+            timeout=3
+        ).json()
+
+    except Exception as e:
+        log_event(trace_id, "sarathi_error", {"error": str(e)})
+        return jsonify({
+            "trace_id": trace_id,
+            "status": "sarathi_unreachable"
+        }), 500
+
+    decision = sarathi_res.get("status")
+
     log_event(trace_id, "decision_received", {
         "decision": decision,
-        "service_id": service_id,
-        "action": action
+        "score": score_data
     })
 
     if decision != "ALLOW":
         return jsonify({
             "trace_id": trace_id,
-            "status": "blocked_by_decision"
+            "status": "blocked",
+            "decision": decision
         })
 
-    # STAGE 2 — GOVERNANCE
+    # =========================
+    # 🔹 STEP 3 — GOVERNANCE
+    # =========================
     gov = validate_deployment_request(service_id, action)
 
-    log_event(trace_id, "governance", {
-        "decision": gov
-    })
+    log_event(trace_id, "governance", {"decision": gov})
 
     if gov == "BLOCK":
         return jsonify({
@@ -52,8 +88,11 @@ def execute():
             "status": "blocked_by_governance"
         })
 
-    # STAGE 3 — EXECUTION
+    # =========================
+    # 🔹 STEP 4 — EXECUTION
+    # =========================
     start = time.time()
+
     result = execute_action(service_id, action)
     latency = time.time() - start
 
@@ -64,10 +103,18 @@ def execute():
         "latency": latency
     })
 
-    # STAGE 4 — VERIFY
+    # =========================
+    # 🔹 STEP 5 — VERIFY
+    # =========================
     verified = verify_deployment(service_id)
 
-    # STAGE 5 — OUTCOME
+    log_event(trace_id, "verification", {
+        "verified": verified
+    })
+
+    # =========================
+    # 🔹 STEP 6 — OUTCOME
+    # =========================
     outcome = record_outcome(
         trace_id=trace_id,
         success=success,
@@ -77,6 +124,8 @@ def execute():
     )
 
     log_event(trace_id, "final_status", outcome)
+
+    print(f"[EXECUTION END] trace_id={trace_id} success={success}", flush=True)
 
     return jsonify({
         "trace_id": trace_id,

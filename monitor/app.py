@@ -35,7 +35,7 @@ def track_event():
 
     user_events.append(data)
 
-    print("[EVENT OK]", data, flush=True)
+    print(f"[TRACE EVENT] trace_id={data['trace_id']} event={data['event_type']}", flush=True)
 
     return jsonify({"status": "event recorded"})
 
@@ -83,7 +83,6 @@ def compute_user_metrics():
 
     most_active = sorted(user_activity.items(), key=lambda x: x[1], reverse=True)[:3]
 
-    # login frequency buckets
     freq = {"2+": 0, "5+": 0, "10+": 0}
     for u, c in login_counts.items():
         if c >= 2: freq["2+"] += 1
@@ -160,10 +159,14 @@ def generate_all_signals(trace_id, latency, error_rate):
     raw += generate_infra_signals(trace_id, latency)
     raw += generate_executer_signals(trace_id)
 
-    return [
+    signals = [
         build_signal(st, svc, metric, val, trace_id)
         for (st, svc, metric, val) in raw
     ]
+
+    print(f"[SIGNALS GENERATED] trace_id={trace_id} count={len(signals)}", flush=True)
+
+    return signals
 
 
 # =========================
@@ -194,12 +197,14 @@ def update_stream():
         "error_rate": data.get("error_rate", 0)
     }
 
+    print(f"[STREAM UPDATE] trace_id={trace_id} latency={data.get('latency')} error={data.get('error_rate')}", flush=True)
+
     return jsonify({"status": "updated"})
 
 
 def stream_generator():
     while True:
-        for trace_id, values in last_inputs.items():
+        for trace_id, values in list(last_inputs.items()):
 
             signals = generate_all_signals(
                 trace_id,
@@ -212,6 +217,8 @@ def stream_generator():
                 "signals": signals,
                 "correlation": correlate(trace_id)
             }
+
+            print(f"[STREAM EMIT] trace_id={trace_id}", flush=True)
 
             yield f"data: {json.dumps(output)}\n\n"
 
