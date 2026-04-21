@@ -107,27 +107,33 @@ def correlate(trace_id):
 # =========================
 def stream_generator():
     while True:
-        output = None
+        try:
+            output = None
 
-        with lock:
-            if event_queue:
-                evt = event_queue.popleft()
-                trace_id = evt["trace_id"]
+            with lock:
+                if event_queue:
+                    evt = event_queue.popleft()
+                    trace_id = evt.get("trace_id")
 
-                output = {
-                    "trace_id": trace_id,
-                    "signals": generate_signals(trace_id),
-                    "correlation": correlate(trace_id),
-                    "causal_chain": causal_chain(trace_id),
-                    "timestamp": int(time.time())
-                }
+                    if not trace_id:
+                        continue
 
-        if output:
-            print(f"[STREAM EMIT] {output['trace_id']}", flush=True)
-            yield f"data: {json.dumps(output)}\n\n"
-        else:
-            # 🔥 keep connection alive
-            yield ": keepalive\n\n"
+                    output = {
+                        "trace_id": trace_id,
+                        "signals": [],  # 🔥 safe default
+                        "correlation": correlate(trace_id),
+                        "timestamp": int(time.time())
+                    }
+
+            if output:
+                print(f"[STREAM EMIT] {output['trace_id']}", flush=True)
+                yield f"data: {json.dumps(output)}\n\n"
+            else:
+                yield ": keepalive\n\n"
+
+        except Exception as e:
+            print(f"[STREAM ERROR] {str(e)}", flush=True)
+            yield ": error\n\n"
 
         time.sleep(0.1)
 

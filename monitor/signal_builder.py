@@ -10,7 +10,9 @@ def build_signal(signal_type, service, metric, value, trace_id):
         raise Exception("trace_id is required for signal")
 
     if not signal_type or not service or not metric:
-        raise Exception("Invalid signal fields")
+        if not trace_id:
+            print("⚠️ Missing trace_id, skipping signal", flush=True)
+            return None
 
     # =========================
     # BUILD SIGNAL
