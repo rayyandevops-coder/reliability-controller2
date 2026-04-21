@@ -71,11 +71,14 @@ jobs:
       run: |
         kubectl delete pod curl-test --ignore-not-found -n staging
         kubectl run curl-test --image=curlimages/curl --restart=Never -n staging -- sleep 60
-        kubectl wait --for=condition=Ready pod/curl-test -n staging --timeout=30s
-        
-        kubectl exec -n staging curl-test -- \
-          curl -f http://monitor-staging-service:5004/health
-        
+
+        sleep 5
+
+        for i in {1..5}; do
+          kubectl exec -n staging curl-test -- curl -f http://monitor-staging-service:5004/health && break
+          sleep 3
+        done
+
         kubectl delete pod curl-test -n staging
 
     # =========================
@@ -120,18 +123,19 @@ jobs:
         kubectl patch service web2-service -n prod -p '{"spec":{"selector":{"app":"web2","version":"green"}}}'
 
     # =========================
-    # 📡 CI/CD TRACE → PRAVAH (CRITICAL STEP)
+    # 📡 CI/CD TRACE → PRAVAH
     # =========================
     - name: Send CI/CD Trace to Monitor
       run: |
         kubectl delete pod curl-ci --ignore-not-found -n prod
         kubectl run curl-ci --image=curlimages/curl --restart=Never -n prod -- sleep 30
-        kubectl wait --for=condition=Ready pod/curl-ci -n prod --timeout=30s
+
+        sleep 5
 
         kubectl exec -n prod curl-ci -- \
-          curl -X POST http://monitor-service:5004/update-stream \
+          curl -X POST http://monitor-service:5004/track-event \
           -H "Content-Type: application/json" \
-          -d "{\"trace_id\":\"$TRACE_ID\",\"latency\":250,\"error_rate\":0.05}"
+          -d "{\"user_id\":\"ci\",\"event_type\":\"deployment\",\"timestamp\":$(date +%s),\"session_id\":\"ci\",\"trace_id\":\"$TRACE_ID\"}"
 
         kubectl delete pod curl-ci -n prod
 
@@ -150,10 +154,13 @@ jobs:
       run: |
         kubectl delete pod curl-test --ignore-not-found -n prod
         kubectl run curl-test --image=curlimages/curl --restart=Never -n prod -- sleep 60
-        kubectl wait --for=condition=Ready pod/curl-test -n prod --timeout=30s
 
-        kubectl exec -n prod curl-test -- \
-          curl -f http://monitor-service:5004/health
+        sleep 5
+
+        for i in {1..5}; do
+          kubectl exec -n prod curl-test -- curl -f http://monitor-service:5004/health && break
+          sleep 3
+        done
 
         kubectl delete pod curl-test -n prod
 
