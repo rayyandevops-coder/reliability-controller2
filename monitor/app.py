@@ -105,37 +105,23 @@ def correlate(trace_id):
 # =========================
 # STREAM (REAL EVENT DRIVEN)
 # =========================
-def stream_generator():
-    while True:
-        try:
-            output = None
+def generate_signals(trace_id):
+    signals = []
 
-            with lock:
-                if event_queue:
-                    evt = event_queue.popleft()
-                    trace_id = evt.get("trace_id")
+    for e in user_events:
+        if e["trace_id"] != trace_id:
+            continue
 
-                    if not trace_id:
-                        continue
+        if e["event_type"] == "user_login":
+            signals.append({"signal_type": "login_detected"})
 
-                    output = {
-                        "trace_id": trace_id,
-                        "signals": [],  # 🔥 safe default
-                        "correlation": correlate(trace_id),
-                        "timestamp": int(time.time())
-                    }
+        elif e["event_type"] == "interaction_click":
+            signals.append({"signal_type": "user_interaction"})
 
-            if output:
-                print(f"[STREAM EMIT] {output['trace_id']}", flush=True)
-                yield f"data: {json.dumps(output)}\n\n"
-            else:
-                yield ": keepalive\n\n"
+        elif e["event_type"] == "execution_done":
+            signals.append({"signal_type": "execution_completed"})
 
-        except Exception as e:
-            print(f"[STREAM ERROR] {str(e)}", flush=True)
-            yield ": error\n\n"
-
-        time.sleep(0.1)
+    return signals
 
 @app.route("/signals/stream")
 def stream():

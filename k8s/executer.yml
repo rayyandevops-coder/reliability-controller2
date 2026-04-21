@@ -27,7 +27,7 @@ spec:
 
         env:
         - name: EXECUTION_MODE
-          value: "kubernetes"
+          value: "simulate"   # 🔥 IMPORTANT FIX
         - name: SARATHI_URL
           value: "http://sarathi-service:5001/decision"
 
@@ -68,10 +68,10 @@ kind: Service
 metadata:
   name: executer-service
 spec:
-  type: NodePort   # 🔥 ADD THIS
+  type: NodePort
   selector:
     app: executer
   ports:
     - port: 5003
       targetPort: 5003
-      nodePort: 30003 
+      nodePort: 30003
