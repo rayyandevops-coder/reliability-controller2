@@ -16,9 +16,9 @@ jobs:
     # 🔹 TRACE ID (CI/CD ORIGIN)
     - name: Generate Trace ID
       run: |
-        TRACE_ID=ci-${{ github.run_id }}
+        TRACE_ID=core-${{ github.run_id }}
         echo "TRACE_ID=$TRACE_ID" >> $GITHUB_ENV
-        echo "🚀 TRACE_ID=$TRACE_ID"
+        echo "TRACE_ID=$TRACE_ID"
 
     # 🔐 Docker Login
     - name: Login DockerHub

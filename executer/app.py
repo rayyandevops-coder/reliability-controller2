@@ -1,142 +1,81 @@
 from flask import Flask, request, jsonify
-import uuid
 import time
 import requests
 import os
 
 from governance import validate_deployment_request
 from core import execute_action, verify_deployment
-from bucket import log_event
-from outcome import record_outcome
 from mitra import calculate_score
 
 app = Flask(__name__)
 
 SARATHI_URL = os.getenv("SARATHI_URL", "http://sarathi-service:5001/decision")
+MONITOR_URL = os.getenv("MONITOR_URL", "http://monitor-service:5004/track-event")
 
 
 @app.route("/execute-action", methods=["POST"])
 def execute():
     data = request.get_json(force=True)
 
+    trace_id = data.get("trace_id")
     service_id = data.get("service_id")
     action = data.get("action")
-    metrics = data.get("metrics", {})
 
-    # 🔥 STRICT TRACE CONTINUITY
-    trace_id = data.get("trace_id")
     if not trace_id:
         return jsonify({"error": "trace_id required"}), 400
 
-    if not service_id or not action:
-        return jsonify({"error": "missing fields"}), 400
+    print(f"[EXECUTION REQUEST] trace_id={trace_id}", flush=True)
 
-    print(f"[EXECUTION START] trace_id={trace_id} service={service_id} action={action}", flush=True)
+    # STEP 1 — MITRA
+    score = calculate_score(data.get("metrics", {}))
 
-    # =========================
-    # 🔹 STEP 1 — MITRA SCORE
-    # =========================
-    score_data = calculate_score(metrics)
+    # STEP 2 — SARATHI
+    res = requests.post(SARATHI_URL, json={
+        "trace_id": trace_id,
+        "payload": score,
+        "action_type": action
+    }).json()
 
-    log_event(trace_id, "mitra_score", score_data)
+    if res.get("status") != "ALLOW":
+        return jsonify({"trace_id": trace_id, "status": "blocked"})
 
-    # =========================
-    # 🔹 STEP 2 — SARATHI DECISION
-    # =========================
-    try:
-        sarathi_res = requests.post(
-            SARATHI_URL,
-            json={
-                "trace_id": trace_id,
-                "action_type": action,
-                "payload": score_data
-            },
-            timeout=3
-        ).json()
-
-    except Exception as e:
-        log_event(trace_id, "sarathi_error", {"error": str(e)})
-        return jsonify({
-            "trace_id": trace_id,
-            "status": "sarathi_unreachable"
-        }), 500
-
-    decision = sarathi_res.get("status")
-
-    log_event(trace_id, "decision_received", {
-        "decision": decision,
-        "score": score_data
-    })
-
-    if decision != "ALLOW":
-        return jsonify({
-            "trace_id": trace_id,
-            "status": "blocked",
-            "decision": decision
-        })
-
-    # =========================
-    # 🔹 STEP 3 — GOVERNANCE
-    # =========================
+    # STEP 3 — GOVERNANCE
     gov = validate_deployment_request(service_id, action)
-
-    log_event(trace_id, "governance", {"decision": gov})
-
     if gov == "BLOCK":
-        return jsonify({
-            "trace_id": trace_id,
-            "status": "blocked_by_governance"
-        })
+        return jsonify({"trace_id": trace_id, "status": "blocked_by_governance"})
 
-    # =========================
-    # 🔹 STEP 4 — EXECUTION
-    # =========================
+    # STEP 4 — EXECUTION
     start = time.time()
-
     result = execute_action(service_id, action)
     latency = time.time() - start
 
-    success = not result.startswith("ERROR")
-
-    log_event(trace_id, "execution", {
-        "result": result,
-        "latency": latency
-    })
-
-    # =========================
-    # 🔹 STEP 5 — VERIFY
-    # =========================
     verified = verify_deployment(service_id)
 
-    log_event(trace_id, "verification", {
-        "verified": verified
-    })
+    print(f"[EXECUTION RESULT] trace_id={trace_id} result={result}", flush=True)
 
-    # =========================
-    # 🔹 STEP 6 — OUTCOME
-    # =========================
-    outcome = record_outcome(
-        trace_id=trace_id,
-        success=success,
-        latency=latency,
-        action=action,
-        service_id=service_id
-    )
-
-    log_event(trace_id, "final_status", outcome)
-
-    print(f"[EXECUTION END] trace_id={trace_id} success={success}", flush=True)
+    # 🔥 IMPORTANT: SEND EVENT TO MONITOR (REAL LINK)
+    try:
+        requests.post(MONITOR_URL, json={
+            "user_id": "system",
+            "event_type": "execution_done",
+            "timestamp": int(time.time()),
+            "session_id": "system",
+            "trace_id": trace_id
+        })
+    except:
+        pass
 
     return jsonify({
         "trace_id": trace_id,
-        "status": "success" if success else "failed",
+        "result": result,
+        "latency": latency,
         "verified": verified
     })
 
 
 @app.route("/health")
 def health():
-    return jsonify({"status": "healthy"})
+    return {"status": "ok"}
 
 
 if __name__ == "__main__":

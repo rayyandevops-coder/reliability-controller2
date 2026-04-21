@@ -1,176 +1,99 @@
-import sys
-sys.path.append(".")
-
 from flask import Flask, request, jsonify, Response
 import time
 import json
-from collections import defaultdict
-
-from signal_builder import build_signal
-from sources.infra import generate_infra_signals
-from sources.cicd import generate_cicd_signals
-from sources.app_metrics import generate_app_signals
-from sources.executer_logs import generate_executer_signals
-from deployment_status import get_deployment_status
+from collections import deque
+import threading
+import psutil   # 🔥 real system metric
 
 app = Flask(__name__)
 
-# =========================
-# STORAGE
-# =========================
-user_events = []
+MAX_EVENTS = 1000
+
+user_events = deque(maxlen=MAX_EVENTS)
+event_queue = deque(maxlen=MAX_EVENTS)
+
+lock = threading.Lock()
+
 
 # =========================
-# EVENT TRACKING (STRICT)
+# TRACK EVENT
 # =========================
 @app.route("/track-event", methods=["POST"])
 def track_event():
-    data = request.get_json(force=True, silent=True) or {}
+    data = request.get_json(force=True)
 
     required = ["user_id", "event_type", "timestamp", "session_id", "trace_id"]
 
-    for field in required:
-        if field not in data:
-            return jsonify({"error": f"{field} missing"}), 400
+    for f in required:
+        if f not in data:
+            return jsonify({"error": f"{f} missing"}), 400
 
-    user_events.append(data)
+    with lock:
+        user_events.append(data)
 
-    print(f"[TRACE EVENT] trace_id={data['trace_id']} event={data['event_type']}", flush=True)
+        event_queue.append({
+            "trace_id": data["trace_id"],
+            "type": data["event_type"],
+            "timestamp": data["timestamp"]
+        })
 
-    return jsonify({"status": "event recorded"})
+    print(f"[TRACE EVENT] {data['trace_id']} -> {data['event_type']}", flush=True)
+
+    return jsonify({"status": "ok"})
 
 
 # =========================
-# USER METRICS
+# SIGNALS (REAL)
 # =========================
-def compute_user_metrics():
-    users = set()
-    active_users = set()
-    user_activity = defaultdict(int)
-    login_counts = defaultdict(int)
+def generate_signals(trace_id):
+    signals = []
 
-    session_start = {}
-    session_end = {}
-
-    now = int(time.time())
-
+    # USER SIGNALS
     for e in user_events:
-        u = e["user_id"]
-        s = e["session_id"]
-
-        users.add(u)
-
-        if now - e["timestamp"] < 600:
-            active_users.add(u)
-
-        user_activity[u] += 1
+        if e["trace_id"] != trace_id:
+            continue
 
         if e["event_type"] == "user_login":
-            login_counts[u] += 1
-
-        if e["event_type"] == "session_start":
-            session_start[s] = e["timestamp"]
-
-        if e["event_type"] == "session_end":
-            session_end[s] = e["timestamp"]
-
-    durations = []
-    for s in session_start:
-        if s in session_end:
-            durations.append(session_end[s] - session_start[s])
-
-    avg_session = sum(durations) // len(durations) if durations else 0
-
-    most_active = sorted(user_activity.items(), key=lambda x: x[1], reverse=True)[:3]
-
-    freq = {"2+": 0, "5+": 0, "10+": 0}
-    for u, c in login_counts.items():
-        if c >= 2: freq["2+"] += 1
-        if c >= 5: freq["5+"] += 1
-        if c >= 10: freq["10+"] += 1
-
-    return {
-        "total_users": len(users),
-        "active_users": len(active_users),
-        "most_active_users": most_active,
-        "avg_session_duration": avg_session,
-        "login_frequency": freq
-    }
-
-
-@app.route("/user-metrics")
-def user_metrics():
-    return jsonify(compute_user_metrics())
-
-
-# =========================
-# PAGE METRICS
-# =========================
-def compute_page_metrics():
-    views = {}
-    clicks = {}
-
-    for e in user_events:
-        page = e.get("metadata", {}).get("page", "unknown")
-
-        if e["event_type"] == "page_view":
-            views[page] = views.get(page, 0) + 1
+            signals.append({"signal_type": "login_detected"})
 
         if e["event_type"] == "interaction_click":
-            clicks[page] = clicks.get(page, 0) + 1
+            signals.append({"signal_type": "user_interaction"})
 
-    return {"views": views, "clicks": clicks}
+        if e["event_type"] == "execution_done":
+            signals.append({"signal_type": "execution_completed"})
 
-
-@app.route("/page-metrics")
-def page_metrics():
-    return jsonify(compute_page_metrics())
-
-
-# =========================
-# SUMMARY (STRICT)
-# =========================
-def compute_summary():
-    m = compute_user_metrics()
-    p = compute_page_metrics()
-
-    return {
-        "total_users": m["total_users"],
-        "active_users": m["active_users"],
-        "top_page": max(p["views"], key=p["views"].get) if p["views"] else None,
-        "avg_session_time": m["avg_session_duration"]
-    }
-
-
-@app.route("/summary")
-def summary():
-    return jsonify(compute_summary())
-
-
-# =========================
-# SIGNALS
-# =========================
-def generate_all_signals(trace_id, latency, error_rate):
-    deployment_status = get_deployment_status()["status"]
-
-    raw = []
-    raw += generate_app_signals(trace_id, latency, error_rate)
-    raw += generate_cicd_signals(trace_id, deployment_status)
-    raw += generate_infra_signals(trace_id, latency)
-    raw += generate_executer_signals(trace_id)
-
-    signals = [
-        build_signal(st, svc, metric, val, trace_id)
-        for (st, svc, metric, val) in raw
-    ]
-
-    print(f"[SIGNALS GENERATED] trace_id={trace_id} count={len(signals)}", flush=True)
+    # 🔥 REAL INFRA SIGNAL (NOT FAKE)
+    cpu = psutil.cpu_percent(interval=0.1)
+    if cpu > 70:
+        signals.append({"signal_type": "cpu_high", "value": cpu})
 
     return signals
 
 
 # =========================
-# CORRELATION (STRICT TRACE)
+# CAUSAL CHAIN
+# =========================
+def causal_chain(trace_id):
+    chain = []
+
+    for e in user_events:
+        if e["trace_id"] != trace_id:
+            continue
+
+        if e["event_type"] == "user_login":
+            chain.append("login")
+
+        if e["event_type"] == "interaction_click":
+            chain.append("click")
+
+        if e["event_type"] == "execution_done":
+            chain.append("execution")
+
+    return chain
+
+
+# =========================
+# CORRELATION
 # =========================
 def correlate(trace_id):
     return {
@@ -180,49 +103,26 @@ def correlate(trace_id):
 
 
 # =========================
-# STREAM (MULTI TRACE SAFE)
+# STREAM (REAL EVENT DRIVEN)
 # =========================
-last_inputs = {}
-
-@app.route("/update-stream", methods=["POST"])
-def update_stream():
-    data = request.get_json(force=True)
-
-    trace_id = data.get("trace_id")
-    if not trace_id:
-        return jsonify({"error": "trace_id required"}), 400
-
-    last_inputs[trace_id] = {
-        "latency": data.get("latency", 0),
-        "error_rate": data.get("error_rate", 0)
-    }
-
-    print(f"[STREAM UPDATE] trace_id={trace_id} latency={data.get('latency')} error={data.get('error_rate')}", flush=True)
-
-    return jsonify({"status": "updated"})
-
-
 def stream_generator():
     while True:
-        for trace_id, values in list(last_inputs.items()):
+        with lock:
+            if event_queue:
+                evt = event_queue.popleft()
+                trace_id = evt["trace_id"]
 
-            signals = generate_all_signals(
-                trace_id,
-                values["latency"],
-                values["error_rate"]
-            )
+                output = {
+                    "trace_id": trace_id,
+                    "signals": generate_signals(trace_id),
+                    "correlation": correlate(trace_id),
+                    "causal_chain": causal_chain(trace_id),
+                    "timestamp": int(time.time())
+                }
 
-            output = {
-                "trace_id": trace_id,
-                "signals": signals,
-                "correlation": correlate(trace_id)
-            }
+                yield f"data: {json.dumps(output)}\n\n"
 
-            print(f"[STREAM EMIT] trace_id={trace_id}", flush=True)
-
-            yield f"data: {json.dumps(output)}\n\n"
-
-        time.sleep(2)
+        time.sleep(0.2)
 
 
 @app.route("/signals/stream")
@@ -232,7 +132,7 @@ def stream():
 
 @app.route("/health")
 def health():
-    return jsonify({"status": "healthy"})
+    return {"status": "ok"}
 
 
 if __name__ == "__main__":
