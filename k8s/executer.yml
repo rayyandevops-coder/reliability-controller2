@@ -68,8 +68,10 @@ kind: Service
 metadata:
   name: executer-service
 spec:
+  type: NodePort   # 🔥 ADD THIS
   selector:
     app: executer
   ports:
     - port: 5003
       targetPort: 5003
+      nodePort: 30003 
