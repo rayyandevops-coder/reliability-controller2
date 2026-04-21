@@ -106,7 +106,11 @@ def correlate(trace_id):
 # STREAM (REAL EVENT DRIVEN)
 # =========================
 def stream_generator():
+    last_emit_time = 0
+
     while True:
+        emitted = False
+
         with lock:
             if event_queue:
                 evt = event_queue.popleft()
@@ -120,14 +124,30 @@ def stream_generator():
                     "timestamp": int(time.time())
                 }
 
+                print(f"[STREAM EMIT] {trace_id}", flush=True)
+
                 yield f"data: {json.dumps(output)}\n\n"
 
-        time.sleep(0.2)
+                emitted = True
+                last_emit_time = time.time()
 
+        # 🔥 fallback heartbeat (VERY IMPORTANT)
+        if not emitted and time.time() - last_emit_time > 5:
+            yield f": heartbeat\n\n"
+            last_emit_time = time.time()
+
+        time.sleep(0.1)
 
 @app.route("/signals/stream")
 def stream():
-    return Response(stream_generator(), mimetype="text/event-stream")
+    return Response(
+        stream_generator(),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no"
+        }
+    )
 
 
 @app.route("/health")
