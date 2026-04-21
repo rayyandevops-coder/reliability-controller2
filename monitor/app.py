@@ -3,7 +3,9 @@ import time
 import json
 from collections import deque
 import threading
-import psutil   # 🔥 real system metric
+import psutil
+from datetime import datetime
+import hashlib
 
 app = Flask(__name__)
 
@@ -13,6 +15,20 @@ user_events = deque(maxlen=MAX_EVENTS)
 event_queue = deque(maxlen=MAX_EVENTS)
 
 lock = threading.Lock()
+
+
+# =========================
+# TIME (ISO STANDARD)
+# =========================
+def now():
+    return datetime.utcnow().isoformat() + "Z"
+
+
+# =========================
+# TRACE HASH (INTEGRITY)
+# =========================
+def trace_hash(trace_id):
+    return hashlib.sha256(trace_id.encode()).hexdigest()
 
 
 # =========================
@@ -43,67 +59,7 @@ def track_event():
 
 
 # =========================
-# SIGNALS (REAL)
-# =========================
-def generate_signals(trace_id):
-    signals = []
-
-    # USER SIGNALS
-    for e in user_events:
-        if e["trace_id"] != trace_id:
-            continue
-
-        if e["event_type"] == "user_login":
-            signals.append({"signal_type": "login_detected"})
-
-        if e["event_type"] == "interaction_click":
-            signals.append({"signal_type": "user_interaction"})
-
-        if e["event_type"] == "execution_done":
-            signals.append({"signal_type": "execution_completed"})
-
-    # 🔥 REAL INFRA SIGNAL (NOT FAKE)
-    cpu = psutil.cpu_percent(interval=0.1)
-    if cpu > 70:
-        signals.append({"signal_type": "cpu_high", "value": cpu})
-
-    return signals
-
-
-# =========================
-# CAUSAL CHAIN
-# =========================
-def causal_chain(trace_id):
-    chain = []
-
-    for e in user_events:
-        if e["trace_id"] != trace_id:
-            continue
-
-        if e["event_type"] == "user_login":
-            chain.append("login")
-
-        if e["event_type"] == "interaction_click":
-            chain.append("click")
-
-        if e["event_type"] == "execution_done":
-            chain.append("execution")
-
-    return chain
-
-
-# =========================
-# CORRELATION
-# =========================
-def correlate(trace_id):
-    return {
-        "trace_id": trace_id,
-        "user_events": [e for e in user_events if e["trace_id"] == trace_id]
-    }
-
-
-# =========================
-# STREAM (REAL EVENT DRIVEN)
+# SIGNALS (REAL ONLY)
 # =========================
 def generate_signals(trace_id):
     signals = []
@@ -123,9 +79,60 @@ def generate_signals(trace_id):
         elif etype == "execution_done":
             signals.append({"signal_type": "execution_completed"})
 
+    # 🔥 REAL INFRA SIGNAL
+    cpu = psutil.cpu_percent(interval=0.1)
+    if cpu > 70:
+        signals.append({
+            "signal_type": "cpu_high",
+            "value": cpu
+        })
+
     return signals
 
 
+# =========================
+# CAUSAL CHAIN (ORDERED)
+# =========================
+def causal_chain(trace_id):
+    chain = []
+
+    events = [e for e in user_events if e["trace_id"] == trace_id]
+
+    # 🔥 ORDER BY TIME
+    events.sort(key=lambda x: x["timestamp"])
+
+    for e in events:
+        et = e["event_type"]
+
+        if et == "user_login":
+            chain.append("user_login")
+
+        elif et == "interaction_click":
+            chain.append("user_click")
+
+        elif et == "execution_done":
+            chain.append("execution")
+
+    return chain
+
+
+# =========================
+# CORRELATION (ORDERED)
+# =========================
+def correlate(trace_id):
+    events = [e for e in user_events if e["trace_id"] == trace_id]
+
+    events.sort(key=lambda x: x["timestamp"])
+
+    return {
+        "trace_id": trace_id,
+        "user_events": events
+    }
+
+
+# =========================
+# STREAM (REAL EVENT DRIVEN)
+# =========================
 def stream_generator():
     while True:
         try:
@@ -141,13 +148,15 @@ def stream_generator():
 
                     output = {
                         "trace_id": trace_id,
+                        "trace_hash": trace_hash(trace_id),
                         "signals": generate_signals(trace_id),
                         "correlation": correlate(trace_id),
-                        "timestamp": int(time.time())
+                        "causal_chain": causal_chain(trace_id),
+                        "timestamp": now()
                     }
 
             if output:
-                print(f"[STREAM EMIT] {output['trace_id']}", flush=True)
+                print(f"[STREAM EMIT] {trace_id}", flush=True)
                 yield f"data: {json.dumps(output)}\n\n"
             else:
                 yield ": keepalive\n\n"
@@ -158,6 +167,10 @@ def stream_generator():
 
         time.sleep(0.1)
 
+
+# =========================
+# STREAM ROUTE
+# =========================
 @app.route("/signals/stream")
 def stream():
     return Response(
@@ -169,10 +182,17 @@ def stream():
         }
     )
 
+
+# =========================
+# HEALTH
+# =========================
 @app.route("/health")
 def health():
     return {"status": "ok"}
 
 
+# =========================
+# MAIN
+# =========================
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5004)
