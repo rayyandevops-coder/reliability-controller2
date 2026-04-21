@@ -46,8 +46,8 @@ def login():
     # 🔥 CORE TRACE ENTRY (MANDATORY PROOF)
     trace_id = request.headers.get("X-TRACE-ID") or request.form.get("trace_id")
 
-    if not user_id or not trace_id:
-        return "user_id and trace_id required", 400
+    if not trace_id:
+       return "trace_id required", 400
 
     print(f"[CORE TRACE RECEIVED] trace_id={trace_id}", flush=True)
 
@@ -75,7 +75,14 @@ def login():
 
 @app.route("/click", methods=["POST"])
 def click():
-    trace_id = request.headers.get("X-TRACE-ID") or request.form.get("trace_id")
+    trace_id = request.headers.get("X-TRACE-ID")
+
+    # 🔥 fallback to form
+    if not trace_id:
+        trace_id = request.form.get("trace_id")
+
+    if not trace_id:
+        return "trace_id missing", 400
 
     requests.post(MONITOR_URL, json={
         "user_id": request.form.get("user_id"),
@@ -83,11 +90,12 @@ def click():
         "timestamp": int(time.time()),
         "session_id": request.form.get("session_id"),
         "trace_id": trace_id,
-        "metadata": {"page": "dashboard", "source": "web1"}
+        "metadata": {"page": "dashboard"}
     })
 
-    return "clicked"
+    print(f"[WEB CLICK] trace_id={trace_id}", flush=True)
 
+    return "clicked"
 
 @app.route("/logout", methods=["POST"])
 def logout():
