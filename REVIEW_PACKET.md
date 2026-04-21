@@ -1,123 +1,140 @@
 # REVIEW PACKET — FINAL INTEGRATION READY
 
-## 1. Entry Point
+## 1. Trace Origin
 
-User request with trace_id:
+Trace is generated externally:
 
+- CI/CD → dynamic trace_id (ci-xxxxx)
+- Core → simulated via header
 
-X-TRACE-ID: core-trace-001
+Example:
 
-
----
-
-## 2. Core Flow
-
-1. Web → receives trace_id
-2. Monitor → stores user events
-3. Signal Engine → generates signals
-4. Stream → outputs correlated data
+TRACE_ID=ci-24652284212
 
 ---
 
-## 3. Full Trace Chain (REAL)
+## 2. Full System Flow
 
+Core / CI-CD
+   ↓
+Web Layer
+   ↓
+Monitor (Pravah)
+   ↓
+Signals → Correlation → Stream
 
-CI/CD → Deployment → User Login → Click → Signal → Stream
+Control Plane (external):
 
-
-Trace ID:
-
-
-core-trace-001
-
-
----
-
-## 4. Real User Event Proof
-
-
-session_start
-user_login
-page_view
-interaction_click
-
-
-Captured inside:
-
-
-"user_events": [...]
-
+Mitra → Sarathi → Executer → Execution Signals → Pravah
 
 ---
 
-## 5. Aggregated Metrics (REAL)
+## 3. Trace Chain (REAL)
 
+CI/CD → Deployment → User Login → Click → Signal → Stream  
 
-total_users > 0
-active_users > 0
-most_active_users present
+Trace IDs observed:
 
-
----
-
-## 6. Correlation Proof
-
-
-"correlation": {
-"trace_id": "core-trace-001",
-"user_events": [ ... ]
-}
-
-
-✔ Trace-based filtering  
-✔ No inference  
+- ci-24652284212 (deployment trace)  
+- trace-1 (user trace)  
 
 ---
 
-## 7. Streaming Proof (REAL OUTPUT)
+## 4. User Event Proof
 
+Captured:
 
-data: {
-"trace_id": "core-trace-001",
-"signals": [...],
-"correlation": {...}
-}
+session_start  
+user_login  
+page_view  
+interaction_click  
 
+Logs:
 
-✔ multi-layer signals  
-✔ correct trace_id  
-✔ real-time output  
+[TRACE EVENT] trace_id=trace-1 event=user_login  
 
 ---
 
-## 8. CI/CD Linkage Proof
+## 5. CI/CD Linkage Proof
 
 GitHub Actions:
 
-- Build → Push → Deploy
-- Kubernetes rollout
-- deployment_success signal generated
+- Build → Push → Deploy  
+- Trace generated per run  
+- Injected into Pravah  
+
+Observed:
+
+[STREAM UPDATE] trace_id=ci-24652284212  
+
+---
+
+## 6. Signal Layer Proof
+
+Signals generated:
+
+- latency_spike  
+- error_spike  
+- deployment_success  
+- pod_crash  
+- execution_failure  
+
+---
+
+## 7. Correlation Proof
+
+Output:
+
+"correlation": {
+  "trace_id": "trace-1",
+  "user_events": [...]
+}
+
+✔ Trace-based grouping  
+✔ No inference  
+✔ Multi-trace separation  
+
+---
+
+## 8. Multi-Trace Proof
+
+Simultaneous traces:
+
+- trace-1 (user flow)  
+- trace-2 (user flow)  
+- ci-xxxxx (deployment)  
+
+✔ No mixing  
+✔ Independent streams  
 
 ---
 
 ## 9. Failure Case
 
+Input:
 
-latency = 900
-error_rate = 0.8
-
+latency = 900  
+error_rate = 0.8  
 
 Output:
 
+latency_spike → CRITICAL  
+error_spike → CRITICAL  
 
-latency_spike → CRITICAL
-error_spike → CRITICAL
+---
 
+## 10. Observability Coverage
+
+✔ User layer  
+✔ System layer  
+✔ CI/CD layer  
+✔ Execution signals  
 
 ---
 
 ## Final Status
 
-✔ Trace continuity complete  
-✔ Multi-layer observability achieved  
-✔ System ready for Core integration  
+✔ Trace continuity achieved  
+✔ Multi-layer observability  
+✔ CI/CD integration validated  
+✔ System ready for Core + Control Plane integration  

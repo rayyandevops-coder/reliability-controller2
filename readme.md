@@ -1,109 +1,158 @@
-# PRAVAH — Full Trace Completion + Real User Observability
+# PRAVAH — Trace-Based Observability Layer
 
 ## Overview
 
-Pravah is an observability layer that captures and correlates:
+Pravah is a strict observability layer that captures and correlates:
 
-- User behavior events
-- System signals (latency, errors)
-- CI/CD deployment signals
-- Execution layer signals
+- User behavior events  
+- System signals (latency, errors)  
+- CI/CD deployment traces  
+- Execution-layer signals  
 
-All data is linked using a **trace_id propagated from upstream (Core)**.
+All data is linked using a **trace_id propagated from upstream systems (Core / CI/CD)**.
+
+Pravah does NOT generate trace_id. It only **propagates, validates, and correlates**.
 
 ---
 
 ## Architecture
 
-Core (Trace Origin) → Web → Monitor (Pravah) → Signals → Stream
+Core / CI-CD (Trace Origin)
+        ↓
+Web Layer (trace propagation)
+        ↓
+Monitor (Pravah Core)
+        ↓
+Signal Generation + Correlation
+        ↓
+Streaming Output (SSE)
 
-- Trace ID is NOT generated inside Pravah
-- Trace ID is received externally (simulated via header)
-- Pravah only propagates and correlates
+Control Plane (external to Pravah):
+Mitra → Sarathi → Executer → Execution Signals → Pravah
 
 ---
 
 ## Key Features
 
-- Trace-based observability (strict)
-- Real user event ingestion
-- Multi-trace support
-- CI/CD signal integration
-- Deterministic summary (no inference)
-- Live streaming (SSE)
+- Strict trace-based observability  
+- Real user event ingestion  
+- CI/CD trace linkage  
+- Multi-trace concurrency  
+- Deterministic summary (no inference)  
+- Real-time streaming (SSE)  
+
+---
+
+## Trace Model
+
+- Trace originates externally (Core / CI/CD)
+- Passed via headers (simulated in testing)
+- Propagated across all layers
+- Used ONLY for correlation (no modification)
 
 ---
 
 ## Deployment
 
-- Dockerized microservices
-- Kubernetes (staging + prod)
-- Blue/Green deployment
-- CI/CD via GitHub Actions
+- Dockerized microservices  
+- Kubernetes (staging + prod)  
+- Blue/Green deployment  
+- CI/CD via GitHub Actions  
 
 ---
 
 ## Real Execution Proof
 
-### 🔹 User Login
-curl -X POST http://54.156.236.10:30001/login
+### 🔹 CI/CD Trace (Deployment)
 
--H "X-TRACE-ID: core-trace-001"
--d "user_id=rayyan"
+From GitHub Actions:
 
+TRACE_ID=ci-24652284212
+
+Observed in Pravah:
+
+[STREAM UPDATE] trace_id=ci-24652284212 latency=200 error=0.05
 
 ---
 
-### 🔹 User Click
+### 🔹 User Login (Trace Propagation)
 
+curl -X POST http://54.156.236.10:30001/login  
+-H "X-TRACE-ID: trace-1"  
+-d "user_id=rayyan"
 
-curl -X POST http://54.156.236.10:30001/click
+Monitor Logs:
 
--H "X-TRACE-ID: core-trace-001"
+[TRACE EVENT] trace_id=trace-1 event=session_start  
+[TRACE EVENT] trace_id=trace-1 event=user_login  
+[TRACE EVENT] trace_id=trace-1 event=page_view  
+
+---
+
+### 🔹 User Interaction
+
+curl -X POST http://54.156.236.10:30001/click  
+-H "X-TRACE-ID: trace-1"  
 -d "user_id=rayyan&session_id=s_123"
 
+Logs:
+
+[TRACE EVENT] trace_id=trace-1 event=interaction_click  
 
 ---
 
 ### 🔹 Signal Injection
 
-
-curl -X POST http://54.156.236.10:30004/update-stream
-
--d '{"trace_id":"core-trace-001","latency":900,"error_rate":0.8}'
-
+curl -X POST http://54.156.236.10:30004/update-stream  
+-d '{"trace_id":"trace-1","latency":900,"error_rate":0.8}'
 
 ---
 
 ## 📊 Real Stream Output
 
-
 data: {
-"trace_id": "core-trace-001",
-"signals": [
-{"signal_type": "latency_spike", "value": 900},
-{"signal_type": "error_spike", "value": 0.8},
-{"signal_type": "deployment_success"},
-{"signal_type": "pod_crash"},
-{"signal_type": "execution_failure"}
-],
-"correlation": {
-"trace_id": "core-trace-001",
-"user_events": [
-{"event_type": "session_start"},
-{"event_type": "user_login"},
-{"event_type": "page_view"},
-{"event_type": "interaction_click"}
-]
-}
+  "trace_id": "trace-1",
+  "signals": [
+    {"signal_type": "latency_spike", "severity": "CRITICAL"},
+    {"signal_type": "error_spike", "severity": "CRITICAL"},
+    {"signal_type": "deployment_success"},
+    {"signal_type": "pod_crash"},
+    {"signal_type": "execution_failure"}
+  ],
+  "correlation": {
+    "trace_id": "trace-1",
+    "user_events": [
+      {"event_type": "session_start"},
+      {"event_type": "user_login"},
+      {"event_type": "page_view"},
+      {"event_type": "interaction_click"}
+    ]
+  }
 }
 
+---
+
+## Observability Scope
+
+✔ Trace continuity across layers  
+✔ Multi-source signal aggregation  
+✔ CI/CD + user + infra linkage  
+
+---
+
+## Limitations (Current Phase)
+
+- Trace origin simulated via header (Core integration pending)  
+- Correlation is trace-based grouping (not causal inference)  
+- Execution signals are observed, not deeply linked with execution_id  
+- Trace validation (hashing) not implemented  
+- Event ordering based on timestamps (no distributed clock sync)  
 
 ---
 
 ## Summary
 
-- Trace continuity maintained across all layers
-- No internal trace generation
-- Real user + infra linkage proven
-- System ready for Core integration
+- Trace continuity maintained across system  
+- Multi-layer observability achieved  
+- CI/CD integration demonstrated  
+- System is integration-ready with Core and Control Plane  
