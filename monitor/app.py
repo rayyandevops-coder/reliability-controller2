@@ -141,29 +141,36 @@ def correlate(trace_id):
 # =========================
 # STREAM (REAL EVENT DRIVEN)
 # =========================
+last_sent = {}
+
 def stream_generator():
     while True:
         try:
-            output = None
-
             with lock:
                 if event_queue:
                     evt = event_queue.popleft()
                     trace_id = evt.get("trace_id")
+                else:
+                    trace_id = None
 
-                    if not trace_id:
-                        continue
+            if not trace_id:
+                yield ": keepalive\n\n"
+                time.sleep(0.1)
+                continue
 
-                    output = {
-                        "trace_id": trace_id,
-                        "trace_hash": trace_hash(trace_id),
-                        "signals": generate_signals(trace_id),
-                        "correlation": correlate(trace_id),
-                        "causal_chain": causal_chain(trace_id),
-                        "timestamp": now()
-                    }
+            output = {
+                "trace_id": trace_id,
+                "trace_hash": trace_hash(trace_id),
+                "signals": generate_signals(trace_id),
+                "correlation": correlate(trace_id),
+                "causal_chain": causal_chain(trace_id),
+                "timestamp": now()
+            }
 
-            if output:
+            # 🔥 emit only on change
+            prev = last_sent.get(trace_id)
+            if prev != output:
+                last_sent[trace_id] = output
                 print(f"[STREAM EMIT] {trace_id}", flush=True)
                 yield f"data: {json.dumps(output)}\n\n"
             else:
@@ -174,8 +181,6 @@ def stream_generator():
             yield ": error\n\n"
 
         time.sleep(0.1)
-
-
 # =========================
 # STREAM ROUTE
 # =========================

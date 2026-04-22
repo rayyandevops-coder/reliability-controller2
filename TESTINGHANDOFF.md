@@ -2,83 +2,68 @@
 
 ## Objective
 
-Validate full trace observability pipeline across:
-
-- User actions  
-- System signals  
-- CI/CD events  
+Validate full trace observability pipeline
 
 ---
 
-## Step 1 — Login (User Trace)
+## Step 1 — Set Trace
 
-curl -X POST http://54.156.236.10:30001/login  
--H "X-TRACE-ID: trace-1"  
+TRACE=core-final-001
+
+---
+
+## Step 2 — Login
+
+curl -X POST http://54.156.236.10:30001/login \
+-H "X-TRACE-ID: $TRACE" \
 -d "user_id=rayyan"
 
 ---
 
-## Step 2 — Interaction
+## Step 3 — Click
 
-curl -X POST http://54.156.236.10:30001/click  
--H "X-TRACE-ID: trace-1"  
+curl -X POST http://54.156.236.10:30001/click \
+-H "X-TRACE-ID: $TRACE" \
 -d "user_id=rayyan&session_id=s_123"
 
 ---
 
-## Step 3 — Inject Signal
+## Step 4 — Execution
 
-curl -X POST http://54.156.236.10:30004/update-stream  
--d '{"trace_id":"trace-1","latency":900,"error_rate":0.8}'
+curl -X POST http://54.156.236.10:30003/execute-action \
+-H "Content-Type: application/json" \
+-d '{
+  "trace_id": "'"$TRACE"'",
+  "service_id": "web1-blue",
+  "action": "restart",
+  "metrics": {"cpu": 80, "error_rate": 0.1}
+}'
 
 ---
 
-## Step 4 — Stream Output
+## Step 5 — Stream
 
 curl -N http://54.156.236.10:30004/signals/stream
 
 ---
 
-## Step 5 — CI/CD Trace Validation
-
-Check stream output for:
-
-trace_id = ci-xxxxx  
-
----
-
 ## Expected Output
 
-- Same trace_id across:
-  - user events  
-  - signals  
-  - correlation  
+✔ Same trace_id everywhere  
+✔ Signals:
+- login_detected  
+- user_interaction  
+- execution_completed  
 
-- user_events NOT empty for user traces  
-- user_events empty for CI/CD traces  
-
-- signals include:
-  - latency_spike  
-  - error_spike  
-  - deployment_success  
-  - pod_crash  
-  - execution_failure  
+✔ Correlation includes user_events  
+✔ Causal chain present  
+✔ Timestamp in ISO format  
 
 ---
 
 ## Success Criteria
 
 ✔ Trace continuity  
-✔ Real user event ingestion  
-✔ Signal correlation  
-✔ CI/CD trace visible  
-✔ Multi-trace support  
-
----
-
-## Notes
-
-- Trace origin is external (simulated for testing)  
-- Pravah does not generate trace_id  
-- Correlation is trace-based (not causal)  
-- System is integration-ready  
+✔ Real execution linkage  
+✔ Event-driven streaming  
+✔ Deterministic correlation  
