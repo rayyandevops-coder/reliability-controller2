@@ -40,9 +40,14 @@ def track_event():
 
     required = ["user_id", "event_type", "timestamp", "session_id", "trace_id"]
 
-    for f in required:
-        if f not in data:
-            return jsonify({"error": f"{f} missing"}), 400
+    if not all([
+        data.get("user_id"),
+        data.get("event_type"),
+        data.get("timestamp"),
+        data.get("session_id"),
+        data.get("trace_id")
+    ]):
+        return jsonify({"error": "invalid event"}), 400
 
     with lock:
         user_events.append(data)
@@ -62,6 +67,7 @@ def track_event():
 # SIGNALS (REAL ONLY)
 # =========================
 def generate_signals(trace_id):
+    seen = set()
     signals = []
 
     for e in user_events:
@@ -71,21 +77,19 @@ def generate_signals(trace_id):
         etype = e.get("event_type")
 
         if etype == "user_login":
-            signals.append({"signal_type": "login_detected"})
+            s = "login_detected"
 
         elif etype == "interaction_click":
-            signals.append({"signal_type": "user_interaction"})
+            s = "user_interaction"
 
         elif etype == "execution_done":
-            signals.append({"signal_type": "execution_completed"})
+            s = "execution_completed"
+        else:
+            continue
 
-    # 🔥 REAL INFRA SIGNAL
-    cpu = psutil.cpu_percent(interval=0.1)
-    if cpu > 70:
-        signals.append({
-            "signal_type": "cpu_high",
-            "value": cpu
-        })
+        if s not in seen:
+            seen.add(s)
+            signals.append({"signal_type": s})
 
     return signals
 
@@ -96,9 +100,12 @@ def generate_signals(trace_id):
 def causal_chain(trace_id):
     chain = []
 
-    events = [e for e in user_events if e["trace_id"] == trace_id]
+    events = [
+        e for e in user_events
+        if e["trace_id"] == trace_id
+        and e.get("user_id")  # 🔥 ignore broken events
+    ]
 
-    # 🔥 ORDER BY TIME
     events.sort(key=lambda x: x["timestamp"])
 
     for e in events:
@@ -114,13 +121,15 @@ def causal_chain(trace_id):
             chain.append("execution")
 
     return chain
-
-
 # =========================
 # CORRELATION (ORDERED)
 # =========================
 def correlate(trace_id):
-    events = [e for e in user_events if e["trace_id"] == trace_id]
+    events = [
+        e for e in user_events
+        if e["trace_id"] == trace_id
+        and e.get("user_id")
+    ]
 
     events.sort(key=lambda x: x["timestamp"])
 
@@ -128,7 +137,6 @@ def correlate(trace_id):
         "trace_id": trace_id,
         "user_events": events
     }
-
 
 # =========================
 # STREAM (REAL EVENT DRIVEN)
