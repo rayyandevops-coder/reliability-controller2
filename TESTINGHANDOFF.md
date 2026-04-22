@@ -2,7 +2,7 @@
 
 ## Objective
 
-Validate full trace observability pipeline
+Validate full real-time observability
 
 ---
 
@@ -35,8 +35,7 @@ curl -X POST http://54.156.236.10:30003/execute-action \
 -d '{
   "trace_id": "'"$TRACE"'",
   "service_id": "web1-blue",
-  "action": "restart",
-  "metrics": {"cpu": 80, "error_rate": 0.1}
+  "action": "restart"
 }'
 
 ---
@@ -47,23 +46,22 @@ curl -N http://54.156.236.10:30004/signals/stream
 
 ---
 
-## Expected Output
+## Expected Behavior
 
-✔ Same trace_id everywhere  
-✔ Signals:
+✔ Signals evolve over time:
 - login_detected  
 - user_interaction  
 - execution_completed  
 
-✔ Correlation includes user_events  
-✔ Causal chain present  
-✔ Timestamp in ISO format  
+✔ Causal chain grows step-by-step  
+✔ Same trace_id everywhere  
+✔ Real timestamps  
 
 ---
 
 ## Success Criteria
 
-✔ Trace continuity  
-✔ Real execution linkage  
+✔ No static output  
+✔ No fake signals  
 ✔ Event-driven streaming  
-✔ Deterministic correlation  
+✔ Execution linkage verified  

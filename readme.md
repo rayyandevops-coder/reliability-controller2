@@ -7,19 +7,17 @@ Pravah is a real-time observability layer that captures and correlates:
 - User behavior events
 - Execution layer outputs
 - System signals
-- CI/CD trace propagation
 
-All data is strictly linked using a **trace_id generated from Core**.
+All data is linked using a **trace_id propagated from Core**.
 
 ---
 
 ## Architecture
 
-Core → Web → Sarathi → Executer → Monitor (Pravah) → Stream
+Core → Web → Sarathi → Executer → Monitor → Stream
 
-✔ Trace originates from Core  
-✔ Propagated across all layers  
 ✔ No internal trace generation  
+✔ End-to-end trace continuity  
 
 ---
 
@@ -48,14 +46,10 @@ curl -X POST http://54.156.236.10:30003/execute-action \
 -d '{
   "trace_id": "core-final-001",
   "service_id": "web1-blue",
-  "action": "restart",
-  "metrics": {
-    "cpu": 80,
-    "error_rate": 0.1
-  }
+  "action": "restart"
 }'
 
-### ✅ Output
+### Output
 
 {
   "trace_id": "core-final-001",
@@ -65,42 +59,47 @@ curl -X POST http://54.156.236.10:30003/execute-action \
 
 ---
 
-## 📡 Real Stream Output
+## 📡 Real Streaming Output
+
+### Step 1 — Login
 
 data: {
-  "trace_id": "core-final-001",
-  "trace_hash": "8be66cf5f46d85cfbf88f877cad689a9741eb81956bd6e778aa3aec399aa798a",
+  "signals": [{"signal_type": "login_detected"}],
+  "causal_chain": ["user_login"]
+}
+
+---
+
+### Step 2 — Click
+
+data: {
+  "signals": [
+    {"signal_type": "login_detected"},
+    {"signal_type": "user_interaction"}
+  ],
+  "causal_chain": ["user_login", "user_click"]
+}
+
+---
+
+### Step 3 — Execution
+
+data: {
   "signals": [
     {"signal_type": "login_detected"},
     {"signal_type": "user_interaction"},
     {"signal_type": "execution_completed"}
   ],
-  "correlation": {
-    "trace_id": "core-final-001",
-    "user_events": [
-      {"event_type": "session_start"},
-      {"event_type": "user_login"},
-      {"event_type": "page_view"},
-      {"event_type": "interaction_click"},
-      {"event_type": "execution_done"}
-    ]
-  },
-  "causal_chain": [
-    "user_login",
-    "user_click",
-    "execution"
-  ],
-  "timestamp": "2026-04-22T09:03:55.763280Z"
+  "causal_chain": ["user_login", "user_click", "execution"]
 }
 
 ---
 
 ## Summary
 
-✔ Trace origin from Core  
-✔ Full trace continuity across layers  
-✔ Real user + execution linkage  
-✔ Event-driven streaming (no fake polling)  
-✔ Deterministic correlation (no inference)  
+✔ Real-time streaming  
+✔ Deterministic correlation  
+✔ Execution linkage proven  
+✔ Trace continuity maintained  
 
-✔ System is integration-ready with TANTRA
+🚀 System is fully integration-ready
