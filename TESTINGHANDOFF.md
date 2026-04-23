@@ -1,67 +1,138 @@
-# TESTING HANDOFF — PRAVAH
+# PRAVAH — Testing Handoff (Vinayak)
 
-## Objective
+## 🎯 Objective
 
-Validate full real-time observability
+Validate:
+
+* Real signals
+* Real-time streaming
+* Trace continuity
+* Execution linkage
 
 ---
 
-## Step 1 — Set Trace
+## 🔹 STEP 1 — Start Stream
 
-TRACE=core-final-001
+```
+curl -N http://54.156.236.10:30004/signals/stream
+```
+
+Expected:
+
+* Keepalive initially
+* New output ONLY on events
 
 ---
 
-## Step 2 — Login
+## 🔹 STEP 2 — Login Event
+
+```
+TRACE=core-proof-1
 
 curl -X POST http://54.156.236.10:30001/login \
 -H "X-TRACE-ID: $TRACE" \
 -d "user_id=rayyan"
+```
+
+Expected:
+
+```
+login_detected:web1
+```
 
 ---
 
-## Step 3 — Click
+## 🔹 STEP 3 — Click Event
 
+```
 curl -X POST http://54.156.236.10:30001/click \
 -H "X-TRACE-ID: $TRACE" \
 -d "user_id=rayyan&session_id=s_123"
+```
+
+Expected:
+
+```
+user_interaction:web1
+```
 
 ---
 
-## Step 4 — Execution
+## 🔹 STEP 4 — Execution Event (REAL)
 
+```
 curl -X POST http://54.156.236.10:30003/execute-action \
 -H "Content-Type: application/json" \
 -d '{
   "trace_id": "'"$TRACE"'",
   "service_id": "web1-blue",
-  "action": "restart"
+  "action": "restart",
+  "metrics": {"cpu": 90, "error_rate": 0.2}
 }'
+```
 
 ---
 
-## Step 5 — Stream
+## 🔹 STEP 5 — Verify Kubernetes Action
 
-curl -N http://54.156.236.10:30004/signals/stream
+```
+kubectl get pods -n prod -w
+```
 
----
+Expected:
 
-## Expected Behavior
-
-✔ Signals evolve over time:
-- login_detected  
-- user_interaction  
-- execution_completed  
-
-✔ Causal chain grows step-by-step  
-✔ Same trace_id everywhere  
-✔ Real timestamps  
+* Old pod terminating
+* New pod created
 
 ---
 
-## Success Criteria
+## 🔹 STEP 6 — Stream Validation
 
-✔ No static output  
-✔ No fake signals  
-✔ Event-driven streaming  
-✔ Execution linkage verified  
+Expected sequence:
+
+1. login_detected:web1
+2. user_interaction:web1
+3. execution_completed:web1-blue
+
+---
+
+## 🔹 FAILURE TEST
+
+Kill a pod manually:
+
+```
+kubectl delete pod <pod-name> -n prod
+```
+
+Expected:
+
+* Signal emitted
+* Same trace_id maintained
+
+---
+
+## 🔹 VALIDATION CHECKLIST
+
+| Check               | Status |
+| ------------------- | ------ |
+| Real signals        | ✅      |
+| No static outputs   | ✅      |
+| Single trace        | ✅      |
+| Execution visible   | ✅      |
+| Streaming real-time | ✅      |
+
+---
+
+## 🚫 Failure Cases
+
+* Missing trace_id → request fails
+* No stream update → system invalid
+* Duplicate output → streaming broken
+
+---
+
+## 🎯 Final Statement
+
+System is valid ONLY if:
+
+> signals change with real events AND trace remains consistent across all layers

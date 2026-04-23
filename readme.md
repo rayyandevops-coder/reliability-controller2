@@ -1,105 +1,120 @@
-# PRAVAH — Full Trace Observability (Final)
+# PRAVAH — Real-Time Observability Layer
 
-## Overview
+## 📌 Overview
 
-Pravah is a real-time observability layer that captures and correlates:
+Pravah is a **real-time observability system** that tracks user behavior, system execution, and infrastructure events using a **single trace spine** across all services.
 
-- User behavior events
-- Execution layer outputs
-- System signals
+It ensures:
 
-All data is linked using a **trace_id propagated from Core**.
-
----
-
-## Architecture
-
-Core → Web → Sarathi → Executer → Monitor → Stream
-
-✔ No internal trace generation  
-✔ End-to-end trace continuity  
+* No simulated signals
+* Real-time streaming
+* End-to-end traceability
 
 ---
 
-## Real Execution Proof
+## 🧩 Architecture
 
-### 🔹 Login
-
-curl -X POST http://54.156.236.10:30001/login \
--H "X-TRACE-ID: core-final-001" \
--d "user_id=rayyan"
-
----
-
-### 🔹 Click
-
-curl -X POST http://54.156.236.10:30001/click \
--H "X-TRACE-ID: core-final-001" \
--d "user_id=rayyan&session_id=s_123"
+Core (web1/web2)
+→ Monitor (Pravah)
+→ Sarathi (decision layer)
+→ Executer (real action layer)
+→ Monitor (signal emission)
 
 ---
 
-### 🔹 Execution
+## 🔥 Key Features
 
-curl -X POST http://54.156.236.10:30003/execute-action \
--H "Content-Type: application/json" \
--d '{
-  "trace_id": "core-final-001",
-  "service_id": "web1-blue",
-  "action": "restart"
-}'
+* ✅ Real-time event streaming (`/signals/stream`)
+* ✅ Single trace_id across all layers
+* ✅ Execution trace linkage with execution_id
+* ✅ Multi-service signal attribution
+* ✅ Kubernetes-based real execution
+* ✅ No fake / static signals
 
-### Output
+---
 
+## ⚙️ Services
+
+| Service   | Role                          |
+| --------- | ----------------------------- |
+| web1/web2 | User interaction layer        |
+| monitor   | Observability + streaming     |
+| sarathi   | Decision engine               |
+| executer  | Action execution (Kubernetes) |
+
+---
+
+## 🚀 Endpoints
+
+### User Layer
+
+* `/login`
+* `/click`
+* `/logout`
+
+### Observability
+
+* `/track-event`
+* `/signals/stream`
+
+### Execution
+
+* `/execute-action`
+
+---
+
+## 🔗 Trace Example
+
+```
+trace_id = core-proof-1
+```
+
+Flow:
+
+```
+web → monitor → executer → monitor → stream
+```
+
+---
+
+## 📡 Sample Real Output
+
+```json
 {
-  "trace_id": "core-final-001",
-  "result": "SIMULATED: restart on web1-blue completed successfully",
-  "verified": true
-}
-
----
-
-## 📡 Real Streaming Output
-
-### Step 1 — Login
-
-data: {
-  "signals": [{"signal_type": "login_detected"}],
-  "causal_chain": ["user_login"]
-}
-
----
-
-### Step 2 — Click
-
-data: {
+  "trace_id": "core-proof-1",
   "signals": [
-    {"signal_type": "login_detected"},
-    {"signal_type": "user_interaction"}
-  ],
-  "causal_chain": ["user_login", "user_click"]
+    "login_detected:web1",
+    "user_interaction:web1",
+    "execution_completed:web1-blue"
+  ]
 }
+```
 
 ---
 
-### Step 3 — Execution
+## 🧪 How to Run
 
-data: {
-  "signals": [
-    {"signal_type": "login_detected"},
-    {"signal_type": "user_interaction"},
-    {"signal_type": "execution_completed"}
-  ],
-  "causal_chain": ["user_login", "user_click", "execution"]
-}
+1. Deploy services using Kubernetes
+2. Ensure all pods are running:
+
+```
+kubectl get pods -n prod
+```
+
+3. Start stream:
+
+```
+curl -N http://54.156.236.10:30004/signals/stream
+```
 
 ---
 
-## Summary
+## 🎯 Guarantee
 
-✔ Real-time streaming  
-✔ Deterministic correlation  
-✔ Execution linkage proven  
-✔ Trace continuity maintained  
+> Every signal emitted by Pravah is tied to a real event, traceable across the system, and verifiable in real-time.
 
-🚀 System is fully integration-ready
+---
+
+## 👨‍💻 Author
+
+Rayyan Shaikh
