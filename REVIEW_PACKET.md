@@ -63,8 +63,11 @@ latency: 0.389s
 Signals:
 
 ```
-login_detected:web1
-execution_completed:web1-blue
+"signals": [
+  "login_detected:web1",
+  "user_interaction:web1",
+  "execution_completed:web1-blue"
+]
 ```
 
 ✔ Correct attribution

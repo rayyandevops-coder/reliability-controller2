@@ -1,26 +1,22 @@
 from flask import Flask, request, jsonify, Response
 import time
 import json
-from collections import deque, defaultdict
+from collections import deque
 import threading
-import psutil
 from datetime import datetime
 import hashlib
 
 app = Flask(__name__)
 
-MAX_EVENTS = 2000
+MAX_EVENTS = 1000
 
 user_events = deque(maxlen=MAX_EVENTS)
 event_queue = deque(maxlen=MAX_EVENTS)
 
-# ✅ persistent signals per trace
-trace_signals = defaultdict(set)
-
-# ✅ prevent duplicate stream output
-last_hash = {}
-
 lock = threading.Lock()
+
+# 🔥 STREAM STATE (prevents duplicate emissions)
+last_sent = {}
 
 
 # =========================
@@ -46,7 +42,7 @@ def track_event():
 
     required = ["user_id", "event_type", "timestamp", "session_id", "trace_id"]
 
-    if not all(data.get(f) for f in required):
+    if not all(data.get(k) for k in required):
         return jsonify({"error": "invalid event"}), 400
 
     with lock:
@@ -54,7 +50,6 @@ def track_event():
 
         event_queue.append({
             "trace_id": data["trace_id"],
-            "event_type": data["event_type"],
             "timestamp": data["timestamp"]
         })
 
@@ -64,67 +59,60 @@ def track_event():
 
 
 # =========================
-# SIGNAL GENERATION (REAL)
+# SIGNALS (STRICT ORDER)
 # =========================
 def generate_signals(trace_id):
-    signals = trace_signals[trace_id]
+    # 🔥 find latest event for this trace
+    latest = None
 
-    for e in user_events:
-        if e.get("trace_id") != trace_id:
-            continue
+    for e in reversed(user_events):
+        if e.get("trace_id") == trace_id:
+            latest = e
+            break
 
-        et = e.get("event_type")
-        service = e.get("metadata", {}).get("source", "unknown")
+    if not latest:
+        return []
 
-        if et == "user_login":
-            signals.add(f"login_detected:{service}")
+    etype = latest.get("event_type")
+    source = latest.get("metadata", {}).get("source", "unknown")
 
-        elif et == "interaction_click":
-            signals.add(f"user_interaction:{service}")
+    if etype == "user_login":
+        return [{"signal_type": f"login_detected:{source}"}]
 
-        elif et == "execution_done":
-            svc = e.get("service", "unknown")
-            signals.add(f"execution_completed:{svc}")
+    elif etype == "interaction_click":
+        return [{"signal_type": f"user_interaction:{source}"}]
 
-    # ✅ REAL INFRA SIGNAL
-    cpu = psutil.cpu_percent(interval=0.1)
+    elif etype == "execution_done":
+        service = latest.get("service", "unknown")
+        return [{"signal_type": f"execution_completed:{service}"}]
 
-    if cpu > 70:
-        signals.add(f"cpu_high:{int(cpu)}")
-
-    return [{"signal_type": s} for s in sorted(signals)]
-
-
+    return []
 # =========================
 # CAUSAL CHAIN
 # =========================
 def causal_chain(trace_id):
-    events = [e for e in user_events if e["trace_id"] == trace_id]
-    events.sort(key=lambda x: x["timestamp"])
+    for e in reversed(user_events):
+        if e.get("trace_id") == trace_id:
+            et = e.get("event_type")
 
-    chain = []
+            if et == "user_login":
+                return ["user_login"]
 
-    for e in events:
-        et = e["event_type"]
+            elif et == "interaction_click":
+                return ["user_click"]
 
-        if et == "user_login":
-            chain.append("user_login")
+            elif et == "execution_done":
+                return ["execution"]
 
-        elif et == "interaction_click":
-            chain.append("user_click")
-
-        elif et == "execution_done":
-            chain.append("execution")
-
-    return chain
-
-
+    return []
 # =========================
 # CORRELATION
 # =========================
 def correlate(trace_id):
-    events = [e for e in user_events if e["trace_id"] == trace_id]
-    events.sort(key=lambda x: x["timestamp"])
+    events = sorted(
+        [e for e in user_events if e.get("trace_id") == trace_id],
+        key=lambda x: x["timestamp"]
+    )
 
     return {
         "trace_id": trace_id,
@@ -133,48 +121,59 @@ def correlate(trace_id):
 
 
 # =========================
-# STREAM (TRUE REAL-TIME)
+# STREAM GENERATOR (FINAL FIX)
 # =========================
-def generate_signals(trace_id):
-    signals = []
-    seen = set()
+def stream_generator():
+    while True:
+        try:
+            with lock:
+                if event_queue:
+                    evt = event_queue.popleft()
+                    trace_id = evt.get("trace_id")
+                else:
+                    trace_id = None
 
-    # ✅ STRICT ORDERING BY REAL TIME
-    events = sorted(
-        [e for e in user_events if e.get("trace_id") == trace_id],
-        key=lambda x: x["timestamp"]
-    )
+            if not trace_id:
+                yield ": keepalive\n\n"
+                time.sleep(0.2)
+                continue
 
-    for e in events:
-        etype = e.get("event_type")
-        source = e.get("metadata", {}).get("source", "unknown")
+            # 🔥 BUILD CORE OUTPUT (NO TIMESTAMP)
+            core_output = {
+                "trace_id": trace_id,
+                "trace_hash": trace_hash(trace_id),
+                "signals": generate_signals(trace_id),
+                "correlation": correlate(trace_id),
+                "causal_chain": causal_chain(trace_id)
+            }
 
-        # =========================
-        # USER SIGNALS
-        # =========================
-        if etype == "user_login":
-            signal = f"login_detected:{source}"
+            prev = last_sent.get(trace_id)
 
-        elif etype == "interaction_click":
-            signal = f"user_interaction:{source}"
+            # 🔥 COMPARE WITHOUT TIMESTAMP
+            if prev != core_output:
+                last_sent[trace_id] = core_output
 
-        # =========================
-        # EXECUTION SIGNAL
-        # =========================
-        elif etype == "execution_done":
-            service = e.get("service", "unknown")
-            signal = f"execution_completed:{service}"
+                final_output = {
+                    **core_output,
+                    "timestamp": now()
+                }
 
-        else:
-            continue
+                print(f"[STREAM EMIT] {trace_id}", flush=True)
 
-        # ✅ REMOVE DUPLICATES BUT PRESERVE ORDER
-        if signal not in seen:
-            seen.add(signal)
-            signals.append({"signal_type": signal})
+                yield f"data: {json.dumps(final_output)}\n\n"
 
-    return signals
+            else:
+                yield ": keepalive\n\n"
 
+        except Exception as e:
+            print(f"[STREAM ERROR] {str(e)}", flush=True)
+            yield ": error\n\n"
+
+        time.sleep(0.2)
+
+# =========================
+# STREAM ROUTE
+# =========================
 @app.route("/signals/stream")
 def stream():
     return Response(

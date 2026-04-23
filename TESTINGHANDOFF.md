@@ -1,4 +1,4 @@
-# PRAVAH — Testing Handoff (Vinayak)
+# PRAVAH — Testing Handoff
 
 ## 🎯 Objective
 
@@ -17,14 +17,9 @@ Validate:
 curl -N http://54.156.236.10:30004/signals/stream
 ```
 
-Expected:
-
-* Keepalive initially
-* New output ONLY on events
-
 ---
 
-## 🔹 STEP 2 — Login Event
+## 🔹 STEP 2 — Login
 
 ```
 TRACE=core-proof-1
@@ -34,7 +29,7 @@ curl -X POST http://54.156.236.10:30001/login \
 -d "user_id=rayyan"
 ```
 
-Expected:
+Observed Output:
 
 ```
 login_detected:web1
@@ -42,7 +37,7 @@ login_detected:web1
 
 ---
 
-## 🔹 STEP 3 — Click Event
+## 🔹 STEP 3 — Click
 
 ```
 curl -X POST http://54.156.236.10:30001/click \
@@ -50,7 +45,7 @@ curl -X POST http://54.156.236.10:30001/click \
 -d "user_id=rayyan&session_id=s_123"
 ```
 
-Expected:
+Observed Output:
 
 ```
 user_interaction:web1
@@ -58,7 +53,7 @@ user_interaction:web1
 
 ---
 
-## 🔹 STEP 4 — Execution Event (REAL)
+## 🔹 STEP 4 — Execution (REAL)
 
 ```
 curl -X POST http://54.156.236.10:30003/execute-action \
@@ -73,41 +68,26 @@ curl -X POST http://54.156.236.10:30003/execute-action \
 
 ---
 
-## 🔹 STEP 5 — Verify Kubernetes Action
+## 🔹 STEP 5 — Kubernetes Validation
 
 ```
 kubectl get pods -n prod -w
 ```
 
-Expected:
+Observed:
 
-* Old pod terminating
 * New pod created
+* Old pod terminated
 
 ---
 
-## 🔹 STEP 6 — Stream Validation
-
-Expected sequence:
-
-1. login_detected:web1
-2. user_interaction:web1
-3. execution_completed:web1-blue
-
----
-
-## 🔹 FAILURE TEST
-
-Kill a pod manually:
+## 🔹 STEP 6 — Final Stream Output
 
 ```
-kubectl delete pod <pod-name> -n prod
+login_detected:web1
+user_interaction:web1
+execution_completed:web1-blue
 ```
-
-Expected:
-
-* Signal emitted
-* Same trace_id maintained
 
 ---
 
@@ -123,15 +103,7 @@ Expected:
 
 ---
 
-## 🚫 Failure Cases
-
-* Missing trace_id → request fails
-* No stream update → system invalid
-* Duplicate output → streaming broken
-
----
-
-## 🎯 Final Statement
+## 🎯 FINAL STATEMENT
 
 System is valid ONLY if:
 

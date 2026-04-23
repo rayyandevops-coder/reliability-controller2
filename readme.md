@@ -2,13 +2,13 @@
 
 ## 📌 Overview
 
-Pravah is a **real-time observability system** that tracks user behavior, system execution, and infrastructure events using a **single trace spine** across all services.
+Pravah is a **real-time observability system** that captures user events, execution behavior, and infrastructure changes using a **single trace spine**.
 
-It ensures:
+All signals are:
 
-* No simulated signals
-* Real-time streaming
-* End-to-end traceability
+* Derived from real system events
+* Streamed in real-time
+* Traceable across all services
 
 ---
 
@@ -16,105 +16,68 @@ It ensures:
 
 Core (web1/web2)
 → Monitor (Pravah)
-→ Sarathi (decision layer)
-→ Executer (real action layer)
-→ Monitor (signal emission)
+→ Sarathi (Decision Layer)
+→ Executer (Kubernetes Action Layer)
+→ Monitor (Streaming Output)
 
 ---
 
 ## 🔥 Key Features
 
-* ✅ Real-time event streaming (`/signals/stream`)
-* ✅ Single trace_id across all layers
-* ✅ Execution trace linkage with execution_id
-* ✅ Multi-service signal attribution
-* ✅ Kubernetes-based real execution
-* ✅ No fake / static signals
-
----
-
-## ⚙️ Services
-
-| Service   | Role                          |
-| --------- | ----------------------------- |
-| web1/web2 | User interaction layer        |
-| monitor   | Observability + streaming     |
-| sarathi   | Decision engine               |
-| executer  | Action execution (Kubernetes) |
-
----
-
-## 🚀 Endpoints
-
-### User Layer
-
-* `/login`
-* `/click`
-* `/logout`
-
-### Observability
-
-* `/track-event`
-* `/signals/stream`
-
-### Execution
-
-* `/execute-action`
+* Real-time streaming (`/signals/stream`)
+* Single trace_id across all layers
+* Execution linkage using execution_id
+* Multi-service signal attribution
+* Kubernetes-based real execution
+* No simulated or static signals
 
 ---
 
 ## 🔗 Trace Example
 
-```
+```id="trace-real"
 trace_id = core-proof-1
 ```
 
-Flow:
-
-```
-web → monitor → executer → monitor → stream
-```
-
 ---
 
-## 📡 Sample Real Output
+## 📡 Real Output (Captured)
 
-```json
+```json id="real-output-1"
 {
   "trace_id": "core-proof-1",
   "signals": [
-    "login_detected:web1",
-    "user_interaction:web1",
-    "execution_completed:web1-blue"
-  ]
+    {"signal_type": "login_detected:web1"}
+  ],
+  "timestamp": "2026-04-23T09:10:26.643649Z"
 }
 ```
 
----
-
-## 🧪 How to Run
-
-1. Deploy services using Kubernetes
-2. Ensure all pods are running:
-
+```json id="real-output-2"
+{
+  "trace_id": "core-proof-1",
+  "signals": [
+    {"signal_type": "login_detected:web1"},
+    {"signal_type": "user_interaction:web1"}
+  ],
+  "timestamp": "2026-04-23T09:10:32.958289Z"
+}
 ```
-kubectl get pods -n prod
-```
 
-3. Start stream:
-
-```
-curl -N http://54.156.236.10:30004/signals/stream
+```json id="real-output-3"
+{
+  "trace_id": "core-proof-1",
+  "signals": [
+    {"signal_type": "login_detected:web1"},
+    {"signal_type": "user_interaction:web1"},
+    {"signal_type": "execution_completed:web1-blue"}
+  ],
+  "timestamp": "2026-04-23T09:10:56.715891Z"
+}
 ```
 
 ---
 
 ## 🎯 Guarantee
 
-> Every signal emitted by Pravah is tied to a real event, traceable across the system, and verifiable in real-time.
-
----
-
-## 👨‍💻 Author
-
-Rayyan Shaikh
+> Every signal emitted by Pravah is directly tied to a real-world event and validated through real execution.
