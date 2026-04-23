@@ -135,51 +135,45 @@ def correlate(trace_id):
 # =========================
 # STREAM (TRUE REAL-TIME)
 # =========================
-def stream_generator():
-    while True:
-        try:
-            with lock:
-                if event_queue:
-                    evt = event_queue.popleft()
-                    trace_id = evt.get("trace_id")
-                else:
-                    trace_id = None
+def generate_signals(trace_id):
+    signals = []
+    seen = set()
 
-            if not trace_id:
-                yield ": keepalive\n\n"
-                time.sleep(0.2)
-                continue
+    # ✅ STRICT ORDERING BY REAL TIME
+    events = sorted(
+        [e for e in user_events if e.get("trace_id") == trace_id],
+        key=lambda x: x["timestamp"]
+    )
 
-            output = {
-                "trace_id": trace_id,
-                "trace_hash": trace_hash(trace_id),
-                "signals": generate_signals(trace_id),
-                "correlation": correlate(trace_id),
-                "causal_chain": causal_chain(trace_id),
-                "timestamp": now()
-            }
+    for e in events:
+        etype = e.get("event_type")
+        source = e.get("metadata", {}).get("source", "unknown")
 
-            # 🔥 CRITICAL FIX: ignore timestamp for duplicate check
-            temp = dict(output)
-            temp.pop("timestamp", None)
+        # =========================
+        # USER SIGNALS
+        # =========================
+        if etype == "user_login":
+            signal = f"login_detected:{source}"
 
-            current_hash = hashlib.md5(json.dumps(temp, sort_keys=True).encode()).hexdigest()
+        elif etype == "interaction_click":
+            signal = f"user_interaction:{source}"
 
-            if last_hash.get(trace_id) != current_hash:
-                last_hash[trace_id] = current_hash
+        # =========================
+        # EXECUTION SIGNAL
+        # =========================
+        elif etype == "execution_done":
+            service = e.get("service", "unknown")
+            signal = f"execution_completed:{service}"
 
-                print(f"[STREAM EMIT] {trace_id}", flush=True)
+        else:
+            continue
 
-                yield f"data: {json.dumps(output)}\n\n"
-            else:
-                yield ": keepalive\n\n"
+        # ✅ REMOVE DUPLICATES BUT PRESERVE ORDER
+        if signal not in seen:
+            seen.add(signal)
+            signals.append({"signal_type": signal})
 
-        except Exception as e:
-            print(f"[STREAM ERROR] {str(e)}", flush=True)
-            yield ": error\n\n"
-
-        time.sleep(0.2)
-
+    return signals
 
 @app.route("/signals/stream")
 def stream():
