@@ -1,54 +1,46 @@
-# PRAVAH — DEMO STEPS
+# DEMO STEPS (REPRODUCIBLE)
 
-## 1. Start Stream
-
-curl -N http://pravah.blackholeinfiverse.com/signals/stream
+## 1. Start stream
+curl -H "Host: pravah.blackholeinfiverse.com" \
+-N http://54.156.236.10/signals/stream
 
 ---
 
-## 2. Login
+## 2. Generate trace
+TRACE=$(uuidgen)
 
-TRACE=core-live-1
+---
 
-curl -X POST http://pravah.blackholeinfiverse.com/login \
+## 3. Login
+curl -X POST http://54.156.236.10:30001/login \
 -H "X-TRACE-ID: $TRACE" \
 -d "user_id=rayyan"
 
 ---
 
-## 3. Click
-
-curl -X POST http://pravah.blackholeinfiverse.com/click \
+## 4. Click
+curl -X POST http://54.156.236.10:30001/click \
 -H "X-TRACE-ID: $TRACE" \
 -d "user_id=rayyan&session_id=s_123"
 
 ---
 
-## 4. Execute
-
-curl -X POST http://pravah.blackholeinfiverse.com/execute-action \
+## 5. Execute (via Sarathi)
+curl -X POST http://54.156.236.10:30005/decision \
 -H "Content-Type: application/json" \
 -d '{
   "trace_id": "'"$TRACE"'",
   "service_id": "web1-blue",
-  "action": "restart",
-  "metrics": {"cpu": 90}
+  "action_type": "restart",
+  "payload": {"decision_score": 0.9}
 }'
 
 ---
 
-## Expected Output
+## EXPECTED RESULT
 
-login_detected:web1  
-user_interaction:web1  
-execution_completed:web1-blue  
-
----
-
-## Kubernetes Validation
-
-kubectl get pods -n prod -w
-
-Expected:
-- Old pod terminating  
-- New pod running  
+Stream shows:
+- login_detected
+- user_interaction
+- decision_made
+- execution_completed

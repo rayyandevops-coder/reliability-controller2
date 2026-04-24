@@ -1,110 +1,114 @@
-# PRAVAH — Testing Handoff
+# HANDOFF TESTING (ZERO CONTEXT REQUIRED)
 
-## 🎯 Objective
+## STEP 1 — START STREAM
 
-Validate:
-
-* Real signals
-* Real-time streaming
-* Trace continuity
-* Execution linkage
+curl -H "Host: pravah.blackholeinfiverse.com" \
+-N http://54.156.236.10/signals/stream
 
 ---
 
-## 🔹 STEP 1 — Start Stream
+## STEP 2 — GENERATE TRACE
 
-```
-curl -N http://54.156.236.10:30004/signals/stream
-```
+TRACE=$(uuidgen)
 
 ---
 
-## 🔹 STEP 2 — Login
-
-```
-TRACE=core-proof-1
+## STEP 3 — USER FLOW
 
 curl -X POST http://54.156.236.10:30001/login \
 -H "X-TRACE-ID: $TRACE" \
--d "user_id=rayyan"
-```
+-d "user_id=test"
 
-Observed Output:
-
-```
-login_detected:web1
-```
-
----
-
-## 🔹 STEP 3 — Click
-
-```
 curl -X POST http://54.156.236.10:30001/click \
 -H "X-TRACE-ID: $TRACE" \
--d "user_id=rayyan&session_id=s_123"
-```
-
-Observed Output:
-
-```
-user_interaction:web1
-```
+-d "user_id=test&session_id=s_1"
 
 ---
 
-## 🔹 STEP 4 — Execution (REAL)
+## STEP 4 — EXECUTION (MANDATORY VIA SARATHI)
 
-```
-curl -X POST http://54.156.236.10:30003/execute-action \
+curl -X POST http://54.156.236.10:30005/decision \
 -H "Content-Type: application/json" \
 -d '{
   "trace_id": "'"$TRACE"'",
   "service_id": "web1-blue",
-  "action": "restart",
-  "metrics": {"cpu": 90, "error_rate": 0.2}
+  "action_type": "restart",
+  "payload": {"decision_score": 0.9}
 }'
-```
 
 ---
 
-## 🔹 STEP 5 — Kubernetes Validation
+## EXPECTED OUTPUT
 
-```
-kubectl get pods -n prod -w
-```
+Stream shows:
 
-Observed:
-
-* New pod created
-* Old pod terminated
-
----
-
-## 🔹 STEP 6 — Final Stream Output
-
-```
-login_detected:web1
-user_interaction:web1
-execution_completed:web1-blue
-```
+{
+  "trace_id": "...",
+  "signals": [
+    {"signal_type":"execution_completed","service":"web1-blue"}
+  ]
+}
 
 ---
 
-## 🔹 VALIDATION CHECKLIST
+## STEP 5 — FAILURE TEST
 
-| Check               | Status |
-| ------------------- | ------ |
-| Real signals        | ✅      |
-| No static outputs   | ✅      |
-| Single trace        | ✅      |
-| Execution visible   | ✅      |
-| Streaming real-time | ✅      |
+TRACE=$(uuidgen)
+
+curl -X POST http://54.156.236.10:30005/decision \
+-H "Content-Type: application/json" \
+-d '{
+  "trace_id": "'"$TRACE"'",
+  "service_id": "invalid-service",
+  "action_type": "restart",
+  "payload": {"decision_score": 0.9}
+}'
 
 ---
 
-## 🎯 FINAL STATEMENT
+## EXPECTED
 
-System is valid ONLY if:
+{
+  "signal_type": "execution_failed"
+}
 
-> signals change with real events AND trace remains consistent across all layers
+---
+
+## STEP 6 — SECURITY TEST
+
+curl -X POST http://54.156.236.10:30003/execute-action \
+-H "Content-Type: application/json" \
+-d '{"trace_id":"hack","service_id":"web1-blue","action":"restart"}'
+
+---
+
+## EXPECTED
+
+{"error":"unauthorized"}
+
+---
+
+## STEP 7 — CONCURRENCY TEST
+
+for i in {1..5}; do
+  TRACE=$(uuidgen)
+  curl -X POST http://54.156.236.10:30001/login \
+  -H "X-TRACE-ID: $TRACE" \
+  -d "user_id=test$i" &
+done
+
+---
+
+## RESULT
+
+Multiple traces appear independently.
+
+---
+
+## FINAL CONDITION
+
+If all above works:
+
+✔ system is valid  
+✔ system is reproducible  
+✔ system requires no developer  

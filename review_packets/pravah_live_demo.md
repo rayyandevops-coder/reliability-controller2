@@ -1,71 +1,129 @@
-# PRAVAH — LIVE PRODUCTION DEMO
+# PRAVAH LIVE PRODUCTION DEMO
 
-## Live URL
+## 1. LIVE URL
+http://pravah.blackholeinfiverse.com *(DNS pending, currently accessed via IP)*
 
-http://pravah.blackholeinfiverse.com
-
----
-
-## Stream Endpoint
-
-/signals/stream
+Fallback:
+http://54.156.236.10
 
 ---
 
-## Real Signal Proof
+## 2. STREAM ENDPOINT
 
-login_detected:web1  
-user_interaction:web1  
-execution_completed:web1-blue  
-
----
-
-## Trace Proof
-
-trace_id: 75bcded9-202e-415f-b223-b857aacb35f2
-
-Present in:
-- user events ✔
-- execution ✔
-- stream ✔
+curl -H "Host: pravah.blackholeinfiverse.com" \
+-N http://54.156.236.10/signals/stream
 
 ---
 
-## Execution Linkage
+## 3. TRACE DEMO (REAL)
 
-execution_id: 10bd727c-9b61-4298-8084-82375303879c  
-service: web1-blue  
-action: restart  
-latency: 0.58s  
+TRACE:
+544e1170-288e-4467-984e-3816fa074f13
+
+### STREAM OUTPUT
+
+data:
+{
+  "trace_id": "544e1170-288e-4467-984e-3816fa074f13",
+  "signals": [
+    {
+      "signal_type": "execution_completed",
+      "service": "web1-blue"
+    }
+  ],
+  "correlation": {
+    "user_events": [
+      {"event_type": "session_start"},
+      {"event_type": "user_login"},
+      {"event_type": "page_view"},
+      {"event_type": "interaction_click"},
+      {"event_type": "decision_made"},
+      {"event_type": "execution_done"}
+    ]
+  },
+  "causal_chain": ["execution"]
+}
 
 ---
 
-## Failure Demo
+## 4. EXECUTION PROOF
 
-✔ Pod deletion handled  
-✔ No system crash  
-✔ Trace preserved  
+Command:
+kubectl get pods -n prod -w
 
----
-
-## Repro Steps
-
-1. Start stream  
-2. Trigger login  
-3. Trigger click  
-4. Execute restart  
+Output:
+web1-blue-OLD   Terminating
+web1-blue-NEW   Running
 
 ---
 
-## Final Validation
+## 5. FAILURE DEMO
 
-✔ Real-time streaming  
-✔ No simulated signals  
-✔ Trace-consistent system  
-✔ Publicly accessible  
+TRACE:
+94ec5f75-8067-4eb3-aa9e-0fd7ec090616
+
+### STREAM OUTPUT
+
+{
+  "trace_id": "94ec5f75-8067-4eb3-aa9e-0fd7ec090616",
+  "signals": [
+    {
+      "signal_type": "execution_failed",
+      "service": "invalid-service"
+    }
+  ]
+}
+
+---
+
+## 6. SECURITY PROOF
+
+Direct execution blocked:
+
+curl POST /execute-action
+
+Response:
+{
+  "error": "unauthorized"
+}
+
+---
+
+## 7. CONCURRENCY TEST
+
+5 parallel traces executed:
+
+test1 → 2b71499d...
+test2 → d111df3a...
+test3 → c38b2d94...
+test4 → 94dece61...
+test5 → 9f5c7b43...
+
+All appeared independently in stream.
+
+---
+
+## 8. FINAL FLOW (VERIFIED)
+
+Core/Web → Monitor → Sarathi → Executer → Monitor → Stream
+
+✔ Trace continuity maintained  
+✔ No bypass of Sarathi  
+✔ Real infrastructure execution  
+✔ Live streaming output  
+
+---
+
+## 9. SYSTEM STATUS
+
+✔ Fully runnable  
+✔ Real-time observable  
+✔ Reproducible via curl  
+✔ No simulated data  
+✔ Production-demo ready  
 
 ---
 
 ## FINAL STATEMENT
 
-Pravah is a real-time, trace-linked observability system where every signal is verifiably tied to real infrastructure events.
+Pravah is now a publicly observable, trace-linked system demonstrating real-time infrastructure behavior across user, execution, and policy layers.

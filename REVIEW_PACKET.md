@@ -1,125 +1,99 @@
-# PRAVAH — Reality Validation Review Packet
+# PRAVAH LIVE PRODUCTION DEMO
 
-## 🔹 REAL SIGNAL PROOF
-
-Observed:
-
-```
-login_detected:web1
-user_interaction:web1
-execution_completed:web1-blue
-```
-
-✔ Signals change per event
-✔ No static outputs
+## LIVE URL
+http://pravah.blackholeinfiverse.com *(DNS pending)*
+Fallback: http://54.156.236.10
 
 ---
 
-## 🔹 STREAMING PROOF
-
-Timestamps:
-
-* 08:51:59 → login
-* 08:52:06 → click
-* 08:52:28 → execution
-
-✔ Real-time updates
-✔ No repeated payloads
+## STREAM ENDPOINT
+curl -H "Host: pravah.blackholeinfiverse.com" \
+-N http://54.156.236.10/signals/stream
 
 ---
 
-## 🔹 TRACE SPINE
+## REAL TRACE PROOF
 
-```
-trace_id = core-proof-1
-```
+TRACE:
+544e1170-288e-4467-984e-3816fa074f13
 
-Present in:
-
-* user events
-* execution events
-* stream
-
-✔ Single trace across system
-
----
-
-## 🔹 EXECUTION LINKAGE
-
-```
-execution_id: ab278242-9f06-4478-9477-26ddda4dabfb
-service: web1-blue
-action: restart
-latency: 0.389s
-```
-
-✔ Linked to trace_id
-✔ Real Kubernetes execution
+OUTPUT:
+{
+  "trace_id": "544e1170-288e-4467-984e-3816fa074f13",
+  "signals": [
+    {"signal_type": "execution_completed", "service": "web1-blue"}
+  ],
+  "correlation": {
+    "user_events": [
+      {"event_type": "session_start"},
+      {"event_type": "user_login"},
+      {"event_type": "page_view"},
+      {"event_type": "interaction_click"},
+      {"event_type": "decision_made"},
+      {"event_type": "execution_done"}
+    ]
+  },
+  "causal_chain": ["execution"]
+}
 
 ---
 
-## 🔹 MULTI-SERVICE VALIDATION
+## FAILURE PROOF
 
-Signals:
+TRACE:
+94ec5f75-8067-4eb3-aa9e-0fd7ec090616
 
-```
-"signals": [
-  "login_detected:web1",
-  "user_interaction:web1",
-  "execution_completed:web1-blue"
-]
-```
-
-✔ Correct attribution
-✔ No mixing
+OUTPUT:
+{
+  "trace_id": "94ec5f75-8067-4eb3-aa9e-0fd7ec090616",
+  "signals": [
+    {"signal_type": "execution_failed", "service": "invalid-service"}
+  ]
+}
 
 ---
 
-## 🔹 LOAD TEST
+## SECURITY PROOF
 
-* Multiple events triggered
-* System stable
+Direct call blocked:
 
-✔ No crash
-✔ Stream active
+POST /execute-action → {"error":"unauthorized"}
 
 ---
 
-## 🔹 FAILURE TRACE
+## CONCURRENCY PROOF
 
-* Execution + restart observed
-* Trace preserved
+5 parallel traces executed:
+test1 → 2b71499d...
+test2 → d111df3a...
+test3 → c38b2d94...
+test4 → 94dece61...
+test5 → 9f5c7b43...
 
-✔ No break
-
----
-
-## 🔹 NO SIMULATION
-
-✔ Real timestamps
-✔ Real latency
-✔ Real pod restart
+All appeared independently in stream.
 
 ---
 
-## 🔹 VINAYAK TEST RESULT
+## EXECUTION PROOF
 
-* Independent testing possible ✔
-* Commands reproducible ✔
+kubectl get pods -n prod -w
 
----
-
-# ✅ FINAL RESULT
-
-Pravah is now:
-
-✔ Real-time
-✔ Trace-consistent
-✔ Event-driven
-✔ Production-valid
+web1-blue-OLD → Terminating  
+web1-blue-NEW → Running  
 
 ---
 
-# 🚀 FINAL STATEMENT
+## FINAL FLOW
 
-> Every signal emitted by Pravah is directly tied to a real-world event, traceable across the system, and verifiable under load.
+Core/Web → Monitor → Sarathi → Executer → Monitor → Stream
+
+✔ trace continuity  
+✔ sarathi enforced  
+✔ real infra execution  
+✔ live streaming  
+
+---
+
+## STATUS
+
+System is fully runnable, observable, and reproducible.

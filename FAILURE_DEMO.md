@@ -1,24 +1,32 @@
-# PRAVAH — FAILURE DEMO
+# FAILURE DEMO
 
-## Test
+TRACE=$(uuidgen)
 
-Force failure by deleting pod:
-
-kubectl delete pod <web1-blue-pod> -n prod
-
----
-
-## Expected Behavior
-
-✔ System remains stable  
-✔ Stream continues  
-✔ Failure event appears  
-✔ Same trace_id maintained  
+curl -X POST http://54.156.236.10:30005/decision \
+-H "Content-Type: application/json" \
+-d '{
+  "trace_id": "'"$TRACE"'",
+  "service_id": "invalid-service",
+  "action_type": "restart",
+  "payload": {"decision_score": 0.9}
+}'
 
 ---
 
-## Validation
+## RESULT
+
+Stream Output:
+
+{
+  "signal_type": "execution_failed",
+  "service": "invalid-service"
+}
+
+---
+
+## VALIDATION
 
 ✔ No crash  
-✔ Trace continuity intact  
-✔ Observability preserved  
+✔ Trace maintained  
+✔ Failure visible  
+✔ System stable  

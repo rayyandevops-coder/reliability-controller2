@@ -1,83 +1,84 @@
-# PRAVAH — Real-Time Observability Layer
+# PRAVAH — LIVE OBSERVABILITY SYSTEM
 
-## 📌 Overview
-
-Pravah is a **real-time observability system** that captures user events, execution behavior, and infrastructure changes using a **single trace spine**.
-
-All signals are:
-
-* Derived from real system events
-* Streamed in real-time
-* Traceable across all services
+Pravah is a real-time observability layer that streams trace-linked system behavior across user, decision, and execution layers.
 
 ---
 
-## 🧩 Architecture
+## ARCHITECTURE
 
-Core (web1/web2)
-→ Monitor (Pravah)
-→ Sarathi (Decision Layer)
-→ Executer (Kubernetes Action Layer)
-→ Monitor (Streaming Output)
+Core/Web → Monitor → Sarathi → Executer → Monitor → Stream
 
 ---
 
-## 🔥 Key Features
+## COMPONENTS
 
-* Real-time streaming (`/signals/stream`)
-* Single trace_id across all layers
-* Execution linkage using execution_id
-* Multi-service signal attribution
-* Kubernetes-based real execution
-* No simulated or static signals
+- Web Layer → user interaction
+- Monitor → event ingestion + streaming
+- Sarathi → policy decision (ALLOW/BLOCK)
+- Executer → real infrastructure actions (Kubernetes)
 
 ---
 
-## 🔗 Trace Example
+## FEATURES
 
-```id="trace-real"
-trace_id = core-proof-1
-```
-
----
-
-## 📡 Real Output (Captured)
-
-```json id="real-output-1"
-{
-  "trace_id": "core-proof-1",
-  "signals": [
-    {"signal_type": "login_detected:web1"}
-  ],
-  "timestamp": "2026-04-23T09:10:26.643649Z"
-}
-```
-
-```json id="real-output-2"
-{
-  "trace_id": "core-proof-1",
-  "signals": [
-    {"signal_type": "login_detected:web1"},
-    {"signal_type": "user_interaction:web1"}
-  ],
-  "timestamp": "2026-04-23T09:10:32.958289Z"
-}
-```
-
-```json id="real-output-3"
-{
-  "trace_id": "core-proof-1",
-  "signals": [
-    {"signal_type": "login_detected:web1"},
-    {"signal_type": "user_interaction:web1"},
-    {"signal_type": "execution_completed:web1-blue"}
-  ],
-  "timestamp": "2026-04-23T09:10:56.715891Z"
-}
-```
+- Real-time streaming (SSE)
+- Trace-linked observability
+- Policy enforcement layer (Sarathi)
+- Infrastructure execution (kubectl)
+- Failure visibility
+- Concurrency support
 
 ---
 
-## 🎯 Guarantee
+## RUN SYSTEM
 
-> Every signal emitted by Pravah is directly tied to a real-world event and validated through real execution.
+### Stream
+curl -H "Host: pravah.blackholeinfiverse.com" \
+-N http://54.156.236.10/signals/stream
+
+---
+
+### Trigger Flow
+
+TRACE=$(uuidgen)
+
+curl -X POST http://54.156.236.10:30001/login \
+-H "X-TRACE-ID: $TRACE" \
+-d "user_id=test"
+
+curl -X POST http://54.156.236.10:30001/click \
+-H "X-TRACE-ID: $TRACE" \
+-d "user_id=test&session_id=s_1"
+
+curl -X POST http://54.156.236.10:30005/decision \
+-H "Content-Type: application/json" \
+-d '{
+  "trace_id": "'"$TRACE"'",
+  "service_id": "web1-blue",
+  "action_type": "restart",
+  "payload": {"decision_score": 0.9}
+}'
+
+---
+
+## RESULT
+
+Stream shows:
+
+- login_detected
+- user_interaction
+- decision_made
+- execution_completed
+
+---
+
+## SECURITY
+
+Direct execution is blocked:
+/execute-action → requires X-CALLER=sarathi
+
+---
+
+## STATUS
+
+Production-demo ready.

@@ -1,59 +1,31 @@
-# TRACE DEMO — PRAVAH
+# TRACE PROOF
 
-## Trace ID
-75bcded9-202e-415f-b223-b857aacb35f2
-
----
-
-## Flow
-
-Core (Web1)
-→ Monitor (/track-event)
-→ Sarathi (/decision)
-→ Executer (/execute-action)
-→ Monitor (/signals/stream)
+TRACE:
+544e1170-288e-4467-984e-3816fa074f13
 
 ---
 
-## Step 1 — Login (User Event)
+## FLOW
 
-curl -X POST http://pravah.blackholeinfiverse.com/login \
--H "X-TRACE-ID: 75bcded9-202e-415f-b223-b857aacb35f2" \
--d "user_id=rayyan"
-
----
-
-## Step 2 — Click (Interaction)
-
-curl -X POST http://pravah.blackholeinfiverse.com/click \
--H "X-TRACE-ID: 75bcded9-202e-415f-b223-b857aacb35f2" \
--d "user_id=rayyan&session_id=s_123"
+User Login →
+User Click →
+Sarathi Decision →
+Executer Action →
+Monitor →
+Stream Output
 
 ---
 
-## Step 3 — Execution (Infra Event)
+## EVIDENCE
 
-curl -X POST http://pravah.blackholeinfiverse.com/execute-action \
--H "Content-Type: application/json" \
--d '{
-  "trace_id": "75bcded9-202e-415f-b223-b857aacb35f2",
-  "service_id": "web1-blue",
-  "action": "restart",
-  "metrics": {"cpu": 90}
-}'
+All events share SAME trace_id.
 
 ---
 
-## Observed Stream Output
+## RESULT
 
-login_detected:web1  
-user_interaction:web1  
-execution_completed:web1-blue  
-
----
-
-## Proof
-
-✔ Same trace_id across all layers  
-✔ Execution linked with execution_id  
-✔ Signals reflect real system events  
+Trace is preserved across:
+✔ user layer  
+✔ decision layer  
+✔ execution layer  
+✔ observability layer  
