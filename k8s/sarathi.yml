@@ -68,4 +68,4 @@ spec:
   ports:
     - port: 5001
       targetPort: 5001
-      nodePort: 30001   # 🔥 FIXED PORT
+      nodePort: 30005  # 🔥 FIXED PORT
