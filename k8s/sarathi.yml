@@ -62,8 +62,10 @@ kind: Service
 metadata:
   name: sarathi-service
 spec:
+  type: NodePort   # 🔥 CHANGE HERE
   selector:
     app: sarathi
   ports:
     - port: 5001
       targetPort: 5001
+      nodePort: 30001   # 🔥 FIXED PORT

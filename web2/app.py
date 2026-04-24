@@ -1,6 +1,7 @@
 from flask import Flask, request, render_template_string
 import requests
 import time
+import uuid
 
 app = Flask(__name__)
 
@@ -15,22 +16,24 @@ login_page = """
 """
 
 dashboard_page = """
-<h2>Dashboard - Web2</h2>
+<h2>Dashboard - Web1</h2>
 <p>Welcome {{user_id}}</p>
+<p><b>Trace ID:</b> {{trace_id}}</p>
 
 <form method="POST" action="/click">
   <input type="hidden" name="user_id" value="{{user_id}}">
   <input type="hidden" name="session_id" value="{{session_id}}">
+  <input type="hidden" name="trace_id" value="{{trace_id}}">
   <button type="submit">Click</button>
 </form>
 
 <form method="POST" action="/logout">
   <input type="hidden" name="user_id" value="{{user_id}}">
   <input type="hidden" name="session_id" value="{{session_id}}">
+  <input type="hidden" name="trace_id" value="{{trace_id}}">
   <button type="submit">Logout</button>
 </form>
 """
-
 
 @app.route("/")
 def home():
@@ -41,40 +44,38 @@ def home():
 def login():
     user_id = request.form.get("user_id")
 
-    # 🔥 STRICT TRACE
     trace_id = request.headers.get("X-TRACE-ID")
-    if not trace_id:
-        return "trace_id required in header", 400
 
-    print(f"[WEB2 TRACE] {trace_id}", flush=True)
+    if trace_id == "auto":
+        trace_id = str(uuid.uuid4())
+
+    if not trace_id:
+        return "trace_id required", 400
 
     session_id = f"s_{int(time.time())}"
 
-    events = ["session_start", "user_login", "page_view"]
-
-    for e in events:
+    for e in ["session_start", "user_login", "page_view"]:
         requests.post(MONITOR_URL, json={
             "user_id": user_id,
             "event_type": e,
             "timestamp": int(time.time()),
             "session_id": session_id,
             "trace_id": trace_id,
-            "metadata": {
-                "page": "dashboard",
-                "source": "web2"
-            }
+            "metadata": {"page": "dashboard", "source": "web1"}
         })
 
     return render_template_string(
         dashboard_page,
         user_id=user_id,
-        session_id=session_id
+        session_id=session_id,
+        trace_id=trace_id
     )
 
 
 @app.route("/click", methods=["POST"])
 def click():
     trace_id = request.headers.get("X-TRACE-ID")
+
     if not trace_id:
         return "trace_id required", 400
 
@@ -84,22 +85,15 @@ def click():
         "timestamp": int(time.time()),
         "session_id": request.form.get("session_id"),
         "trace_id": trace_id,
-        "metadata": {
-            "page": "dashboard",
-            "source": "web2"
-        }
+        "metadata": {"page": "dashboard", "source": "web1"}
     })
 
-    print(f"[WEB2 CLICK] trace_id={trace_id}", flush=True)
-
-    return "clicked"
+    return f"clicked (trace={trace_id})"
 
 
 @app.route("/logout", methods=["POST"])
 def logout():
     trace_id = request.headers.get("X-TRACE-ID")
-    if not trace_id:
-        return "trace_id required", 400
 
     requests.post(MONITOR_URL, json={
         "user_id": request.form.get("user_id"),
@@ -107,9 +101,7 @@ def logout():
         "timestamp": int(time.time()),
         "session_id": request.form.get("session_id"),
         "trace_id": trace_id,
-        "metadata": {
-            "source": "web2"
-        }
+        "metadata": {"source": "web1"}
     })
 
     return "logout"

@@ -1,51 +1,71 @@
-"""
-sarathi/app.py — Policy Decision Point (PDP)
-Receives proposals from SETU and returns: ALLOW / BLOCK / ESCALATE
-Decision is based on Mitra decision_score:
-  score > 0.6  → ALLOW   (high urgency + impact, act immediately)
-  score > 0.35 → ESCALATE (medium confidence, needs review)
-  else         → BLOCK    (low score, unsafe to act)
-"""
-
 from flask import Flask, request, jsonify
+import requests, os, time
 
 app = Flask(__name__)
+
+EXECUTER_URL = os.getenv("EXECUTER_URL","http://executer-service:5003/execute-action")
+MONITOR_URL  = os.getenv("MONITOR_URL","http://monitor-service:5004/track-event")
 
 
 @app.route("/decision", methods=["POST"])
 def decision():
-    data  = request.get_json()
-    score = data.get("payload", {}).get("decision_score", 0)
-    action_type = data.get("action_type", "unknown")
-    trace_id    = data.get("trace_id", "unknown")
+    data = request.get_json()
 
-    # ─── Policy rules ─────────────────────────────────────────────────────────
+    trace_id = data.get("trace_id")
+    payload  = data.get("payload",{})
+    action   = data.get("action_type")
+    service  = data.get("service_id")
+
+    score = payload.get("decision_score",0)
+
+    # POLICY
     if score > 0.6:
         status = "ALLOW"
-        reason = f"Score {score} exceeds ALLOW threshold (0.6). Action approved."
-
     elif score > 0.35:
         status = "ESCALATE"
-        reason = f"Score {score} in ESCALATE range (0.35–0.6). Manual review required."
-
     else:
         status = "BLOCK"
-        reason = f"Score {score} below minimum threshold (0.35). Action blocked."
 
-    print(f"[Sarathi] trace={trace_id} action={action_type} score={score} → {status}", flush=True)
+    # 🔥 LOG DECISION
+    requests.post(MONITOR_URL, json={
+        "user_id":"sarathi",
+        "event_type":"decision_made",
+        "timestamp":int(time.time()),
+        "session_id":"system",
+        "trace_id":trace_id,
+        "metadata":{"decision":status,"action":action}
+    })
+
+    if status != "ALLOW":
+        return jsonify({"status":status,"trace_id":trace_id})
+
+    # 🔥 EXECUTION (ONLY PATH)
+    res = requests.post(EXECUTER_URL, json={
+        "trace_id":trace_id,
+        "service_id":service,
+        "action":action,
+        "metrics":payload
+    }, headers={"X-CALLER":"sarathi"})
+
+    exec_res = res.json()
+
+    # 🔥 FAILURE FIX
+    if exec_res.get("status") != "success":
+        return jsonify({
+            "status":"failed",
+            "trace_id":trace_id,
+            "executer_response":exec_res
+        })
 
     return jsonify({
-        "status":   status,
-        "reason":   reason,
-        "trace_id": trace_id,
-        "score":    score
+        "status":"executed",
+        "trace_id":trace_id,
+        "executer_response":exec_res
     })
 
 
 @app.route("/health")
 def health():
-    return jsonify({"status": "healthy"})
+    return {"status":"healthy"}
 
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5001)
+app.run(host="0.0.0.0", port=5001)
