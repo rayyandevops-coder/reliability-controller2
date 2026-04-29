@@ -1,16 +1,16 @@
 # EXECUTION_VERIFICATION_PROOF.md
 
-**System:** Pravah  
-**Claim:** Execution and verification are two separate, independent signals. Execution does NOT imply success. Verification confirms the actual outcome after the action completes.
+**System:** Pravah
+**Claim:** Execution and verification are two separate signals. Execution does NOT imply success. Verification confirms the actual outcome.
 
 ---
 
-## 1. Code Proof (executer/app.py)
+## 1. Code Proof — executer/app.py
 
 ```python
 execution_id = str(uuid.uuid4())
 
-# SIGNAL 3 — execution (action attempted — outcome unknown at this point)
+# SIGNAL — execution (action attempted, outcome unknown)
 requests.post(MONITOR_URL, json={
     "event_type":   "execution_started",
     "trace_id":     trace_id,
@@ -22,7 +22,7 @@ requests.post(MONITOR_URL, json={
 
 result = execute_action(service, action)   # kubectl runs HERE
 
-# SIGNAL 4 — verification (outcome confirmed AFTER kubectl returns)
+# SIGNAL — verification (outcome confirmed AFTER kubectl returns)
 verification_result = "SUCCESS" if result["status"] == "success" else "FAILURE"
 
 requests.post(MONITOR_URL, json={
@@ -36,11 +36,20 @@ requests.post(MONITOR_URL, json={
 
 ---
 
-## 2. SUCCESS Case — Real Output
+## 2. SUCCESS Case — Real Output (2026-04-29)
 
-**Test:** `service_id: web1-blue` (valid), `decision_score: 0.9`
+**Executer API response:**
+```json
+{
+  "execution_id": "4a8e2bb4-bb4a-427e-a142-0f0e8e69eb9d",
+  "latency": 0.6184470653533936,
+  "output": "deployment.apps/web1-blue patched",
+  "status": "success",
+  "trace_id": "5d050c8c-c880-4e6d-9a01-8274556f30ec"
+}
+```
 
-**Execution signal (real — 08:23:31.137373Z):**
+**Execution signal:**
 ```json
 {
   "signal_type": "execution",
@@ -58,7 +67,7 @@ requests.post(MONITOR_URL, json={
 }
 ```
 
-**Verification signal (real — 08:23:31.337985Z):**
+**Verification signal:**
 ```json
 {
   "signal_type": "verification",
@@ -77,24 +86,11 @@ requests.post(MONITOR_URL, json={
 }
 ```
 
-**Executer API response (real):**
-```json
-{
-  "execution_id": "4a8e2bb4-bb4a-427e-a142-0f0e8e69eb9d",
-  "latency": 0.6184470653533936,
-  "output": "deployment.apps/web1-blue patched",
-  "status": "success",
-  "trace_id": "5d050c8c-c880-4e6d-9a01-8274556f30ec"
-}
-```
-
 ---
 
-## 3. FAILURE Case — Real Output
+## 3. FAILURE Case — Real Output (invalid-service)
 
-**Test:** `service_id: invalid-service`
-
-**Execution signal (real — 08:23:33.142540Z):**
+**Execution signal:**
 ```json
 {
   "signal_type": "execution",
@@ -112,7 +108,7 @@ requests.post(MONITOR_URL, json={
 }
 ```
 
-**Verification signal (real — 08:23:33.343033Z):**
+**Verification signal:**
 ```json
 {
   "signal_type": "verification",
@@ -133,7 +129,7 @@ requests.post(MONITOR_URL, json={
 
 ---
 
-## 4. Key Properties — Proven
+## 4. Properties Proven
 
 | Property | Execution Signal | Verification Signal |
 |----------|-----------------|---------------------|
@@ -141,4 +137,4 @@ requests.post(MONITOR_URL, json={
 | execution_id | Present | Present — same ID links the pair |
 | Emitted when | Before kubectl runs | After kubectl returns |
 | severity on failure | INFO | CRITICAL |
-| Proven by | emitted_at 08:23:31.137Z | emitted_at 08:23:31.337Z |
+| Timestamp | 08:23:31.137Z | 08:23:31.337Z |
