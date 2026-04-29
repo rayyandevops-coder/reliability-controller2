@@ -1,168 +1,233 @@
-REVIEW_PACKET — PRAVAH FINAL COMPLIANCE
-Version: Final Compliance Lock
-Status: TANTRA Integration Ready
-System: Pravah — Real-time Trace-Governed Signal & Execution System
+# PRAVAH — FINAL COMPLIANCE REVIEW PACKET
 
-1. ENTRY POINT
-monitor/app.py
+**System:** Pravah  
+**Server:** 54.156.236.10  
+**Domain:** pravah.blackholeinfiverse.com  
+**Validated:** 2026-04-29  
+**Status:** Integration-ready
 
-Flask server, port 5004
-Receives all events via POST /track-event
-Streams all signals via GET /signals/stream (Server-Sent Events)
-No event processed without a valid trace_id
+---
 
+## 1. SYSTEM DEFINITION
 
-2. CORE EXECUTION FLOW (3 FILES MAX)
-File 1 — Ingestion Layer: monitor/app.py
+Pravah is a non-interpretive, trace-complete observability layer.  
+It observes events across Core → Sarathi → Executer and emits flat, trace-linked signals.  
+It does NOT interpret. It does NOT conclude. It does NOT infer.
 
-POST /track-event requires: user_id, event_type, timestamp, session_id, trace_id
-Missing any field → 400 rejection
-Events stored in thread-safe deque with threading.Lock()
-trace_id pushed to event_queue for stream processing
+---
 
-File 2 — Signal Engine: monitor/signal_builder.py + monitor/validator.py
+## 2. PHASE 1 — INTERPRETATION REMOVED ✅
 
-build_signal(signal_type, service, metric, value, trace_id) constructs typed signals
-severity_engine.py classifies each metric into INFO / WARN / CRITICAL
-validator.py runs jsonschema.validate() against signal_schema.json
-Validation failure → exception raised → signal NOT emitted
+The following were removed from the system entirely:
 
-File 3 — Streaming Layer: monitor/app.py → stream_generator()
+| Removed | Was | Reason |
+|---------|-----|--------|
+| `causal_chain` | `["execution"]` | Inferred conclusion |
+| `correlation{}` | Nested event grouping | Inferred summary |
+| `signals[]` wrapper | Array blob | Non-flat format |
+| `generate_signals()` | Interpretation function | Not allowed |
+| `causal_chain()` | Inference function | Not allowed |
+| `correlate()` | Grouping function | Not allowed |
 
-Pops trace_id from queue, builds full payload: signals + correlation + causal chain
-Emits data: {...}\n\n only when payload changes (deduplication via last_sent)
-Sends : keepalive\n\n when queue empty — holds SSE connection open
-
-
-3. LIVE FLOW
-Core  →  POST /track-event  (with trace_id)
-       →  monitor stores event
-       →  stream_generator() pops trace_id
-       →  generate_signals() maps event_type → signal
-       →  SSE client receives real-time JSON
-Real JSON Output:
-json{
-  "trace_id": "a1b2c3d4-0001-0002-0003-e5f6a7b8c9d0",
-  "trace_hash": "7f3d2e1a9b4c5d6e...",
-  "signals": [
-    {
-      "signal_type": "execution_completed",
-      "service": "web1-blue",
-      "metric": "status",
-      "value": "SUCCESS",
-      "severity": "INFO",
-      "timestamp": 1714200000,
-      "trace_id": "a1b2c3d4-0001-0002-0003-e5f6a7b8c9d0"
-    }
-  ],
-  "correlation": {
-    "trace_id": "a1b2c3d4-0001-0002-0003-e5f6a7b8c9d0",
-    "user_events": [
-      {"event_type": "user_login",       "timestamp": 1714199940},
-      {"event_type": "interaction_click","timestamp": 1714199950},
-      {"event_type": "decision_made",    "timestamp": 1714199960},
-      {"event_type": "execution_done",   "timestamp": 1714200000}
-    ]
-  },
-  "causal_chain": ["execution"],
-  "timestamp": "2024-04-27T10:00:00Z"
+**Proof — stream before (old format):**
+```json
+{
+  "trace_id": "...",
+  "signals": [{"signal_type": "execution_completed"}],
+  "correlation": {"user_events": [...]},
+  "causal_chain": ["execution"]
 }
+```
 
-4. WHAT WAS BUILT
+**Stream after (new format — real output 2026-04-29):**
+```
+data: {"signal_type": "login_detected", "service": "web1", "metric": "status", "value": "RUNNING", "severity": "INFO", "timestamp": 1777450910, "trace_id": "5d050c8c-c880-4e6d-9a01-8274556f30ec", "trace_origin": "core", "trace_hash": "3ba9693acb64c1ca8124e49458b96723e9e5afb199a10226cf5e88872762ed32", "source": "core", "emitted_at": "2026-04-29T08:23:29.934096Z"}
+```
 
-Real-time SSE signal streaming, fully scoped by trace_id
-Strict trace_id validation at every ingestion point — no event accepted without it
-Signal schema enforcement via jsonschema — all 7 fields required, no extras allowed
-Severity classification engine: INFO / WARN / CRITICAL per metric+value threshold
-Sarathi policy decision point: ALLOW / BLOCK / ESCALATE from decision_score
-Executer locked behind X-CALLER: sarathi header — direct calls return 403
-sovereign_bridge.py — single path from proposal to Sarathi (no bypass)
-governance.py — blocks restricted service+action pairs before execution
-Kubernetes execution via kubectl patch; simulation fallback for test environments
-Causal chain builder — maps event sequence to execution lineage per trace
-Payload deduplication — identical stream payloads not re-emitted
-Thread-safe event queue with threading.Lock()
-Docker Compose + Kubernetes manifests for local and production
+One signal per `data:` line. Flat. Independent. No wrappers.
 
+---
 
-5. FAILURE CASES
-CaseInputResponseInvalid serviceservice_id: "invalid-xyz"{"status":"failed","error":"invalid service"}kubectl failurekubectl non-zero exit{"status":"failed","error":"deployment not found"} → stream: execution_failedMissing trace_id (track-event)no trace_id field{"error":"invalid event"} HTTP 400Missing trace_id (execute-action)no trace_id field{"error":"trace_id required"} HTTP 400Unauthorized direct executionno X-CALLER header{"error":"unauthorized"} HTTP 403Sarathi BLOCKdecision_score: 0.1{"status":"BLOCK","trace_id":"..."} — Executer never calledSignal schema violationmissing metric fieldValidationError raised — signal not emitted
+## 3. PHASE 2 — TRACE VISIBILITY ✅
 
-6. TRACE ORIGIN PROOF
+Every signal carries:
+- `trace_origin: "core"` — asserts entry layer
+- `source: "core"` — confirms origin
+- `trace_hash` — SHA-256 of trace_id for external verification
 
-trace_id is not generated anywhere inside Pravah
-Monitor, Sarathi, Executer all read it from the incoming request — never call uuid.uuid4() for it
-Only execution_id is generated internally (Executer's own reference)
-Missing trace_id → rejected at every entry point
-Full proof: proof/TRACE_ORIGIN_PROOF.md
+**Real proof — same trace_hash on all signals for trace `5d050c8c`:**
+```
+3ba9693acb64c1ca8124e49458b96723e9e5afb199a10226cf5e88872762ed32
+```
+Appears identically on login_detected, decision, enforcement, execution, verification, execution_completed — proving no mutation across layers.
 
+Full proof: `TRACE_VISIBILITY_PROOF.md`
 
-7. SARATHI ENFORCEMENT PROOF
+---
 
-Execution path: Core → Sarathi /decision → Executer /execute-action
-Sarathi checks decision_score → BLOCK / ESCALATE returns before calling Executer
-Executer validates X-CALLER: sarathi header — 403 on any other caller
-No other code path triggers execution
-Full proof: proof/SARATHI_PROOF.md
+## 4. PHASE 3 — SARATHI SIGNALS IN STREAM ✅
 
-
-8. SIGNAL SCHEMA
-All signals conform to monitor/signal_schema.json:
-json{
-  "signal_type": "execution_completed",
-  "service":     "web1-blue",
-  "metric":      "status",
-  "value":       "SUCCESS",
-  "severity":    "INFO",
-  "timestamp":   1714200000,
-  "trace_id":    "a1b2c3d4-0001-0002-0003-e5f6a7b8c9d0"
+**Decision signal (real output):**
+```json
+{
+  "signal_type": "decision",
+  "service": "system",
+  "metric": "status",
+  "value": "RUNNING",
+  "severity": "INFO",
+  "timestamp": 1777450932,
+  "trace_id": "5d050c8c-c880-4e6d-9a01-8274556f30ec",
+  "trace_origin": "core",
+  "source": "core",
+  "decision": "ALLOW",
+  "policy_reference": "score_threshold_0.6",
+  "action": "restart",
+  "emitted_at": "2026-04-29T08:23:30.736409Z"
 }
-Rules enforced:
+```
 
-All 7 fields required (additionalProperties: false)
-signal_type, service, metric — enum-bound, no free-form strings
-value — number ≥ 0 OR "SUCCESS" | "FAILURE" | "RUNNING" only
-severity — "INFO" | "WARN" | "CRITICAL" only
-timestamp — integer Unix epoch (no ISO strings, no milliseconds)
-trace_id — UUID v4 pattern enforced via regex
+**Enforcement signal (real output):**
+```json
+{
+  "signal_type": "enforcement",
+  "service": "sarathi",
+  "metric": "status",
+  "value": "RUNNING",
+  "severity": "INFO",
+  "timestamp": 1777450932,
+  "trace_id": "5d050c8c-c880-4e6d-9a01-8274556f30ec",
+  "trace_origin": "core",
+  "source": "core",
+  "enforcement_status": "validated",
+  "emitted_at": "2026-04-29T08:23:30.936904Z"
+}
+```
 
+Order confirmed: decision (08:23:30.736Z) → enforcement (08:23:30.936Z) → execution (08:23:31.137Z)
 
-9. DNS PROOF
-bash# Verify domain:
-curl -s http://pravah.blackholeinfiverse.com/health
-# → {"status": "ok"}
+Full proof: `SARATHI_STREAM_PROOF.md`
 
-# Stream via domain (no IP fallback):
-curl -N http://pravah.blackholeinfiverse.com/signals/stream
-Full setup: proof/DEMO_STEPS.md — Phase 5
+---
 
-10. REPRODUCIBILITY
-Full curl-only flow documented in proof/DEMO_STEPS.md.
-Steps: stream start → login event → execution via Sarathi → observe stream → failure case → security test.
-No local setup required. No questions needed.
+## 5. PHASE 4 — EXECUTION + VERIFICATION SPLIT ✅
 
-11. CONCURRENCY PROOF
+**Execution signal (real — value: RUNNING, no success implied):**
+```json
+{
+  "signal_type": "execution",
+  "service": "web1-blue",
+  "value": "RUNNING",
+  "execution_id": "4a8e2bb4-bb4a-427e-a142-0f0e8e69eb9d",
+  "emitted_at": "2026-04-29T08:23:31.137373Z"
+}
+```
 
-10 parallel traces fired simultaneously
-Each trace: isolated event + execution path
-No signal mixing (signals filtered by exact trace_id equality)
-No queue corruption (threading.Lock() on all writes)
-No duplicate emissions (dedup via last_sent dict)
-Avg latency: ~340ms | Max: <500ms
-Full proof + test script: proof/CONCURRENCY_PROOF.md
+**Verification signal (real — value: SUCCESS, outcome confirmed):**
+```json
+{
+  "signal_type": "verification",
+  "service": "web1-blue",
+  "value": "SUCCESS",
+  "execution_id": "4a8e2bb4-bb4a-427e-a142-0f0e8e69eb9d",
+  "result": "SUCCESS",
+  "emitted_at": "2026-04-29T08:23:31.337985Z"
+}
+```
 
+**On failure (invalid-service — real output):**
+```json
+{"signal_type": "verification", "value": "FAILURE", "severity": "CRITICAL", "result": "FAILURE", "execution_id": "8ca09b1b-a5b0-457e-8ef0-5d6bb6cc2e85"}
+{"signal_type": "execution_failed", "value": "FAILURE", "severity": "CRITICAL", "execution_id": "8ca09b1b-a5b0-457e-8ef0-5d6bb6cc2e85"}
+```
 
-DELIVERABLES INDEX
-FilePhaseStatusreview_packets/pravah_final_compliance.md1, 8✅ This fileproof/TRACE_ORIGIN_PROOF.md2✅proof/SARATHI_PROOF.md3✅monitor/signal_schema.json4✅proof/DEMO_STEPS.md5, 6✅proof/CONCURRENCY_PROOF.md7✅
+Full proof: `EXECUTION_VERIFICATION_PROOF.md`
 
-BENCHMARK STATEMENT
-Pravah is:
+---
 
-Trace-sovereign — trace_id originates from Core, propagated unchanged
-Execution-gated — no execution outside Sarathi ALLOW + header lock
-Schema-safe — all signals validated against TANTRA schema before emission
-Audit-safe — every event logged with trace_id, every failure captured
-Reproducible — full curl flow documented, no human guidance needed
-Concurrency-stable — 10 parallel traces, zero mixing, zero corruption
+## 6. PHASE 5 — FULL TRACE CHAIN ✅
 
-Pravah is ready for TANTRA integration without sovereignty risk.
+For trace `5d050c8c-c880-4e6d-9a01-8274556f30ec` — all 6 required stages present:
+
+| Stage | Signal | emitted_at |
+|-------|--------|------------|
+| 1. user_event | login_detected | 08:23:29.934Z |
+| 2. decision | decision (ALLOW) | 08:23:30.736Z |
+| 3. enforcement | enforcement (validated) | 08:23:30.936Z |
+| 4. execution | execution (RUNNING) | 08:23:31.137Z |
+| 5. verification | verification (SUCCESS) | 08:23:31.337Z |
+| 6. signal emission | execution_completed | 08:23:31.538Z |
+
+Full proof: `FULL_TRACE_STREAM_PROOF.md`
+
+---
+
+## 7. PHASE 6 — STREAM FORMAT LOCKED ✅
+
+Each signal is independently structured:
+
+```json
+{
+  "signal_type":  "...",
+  "service":      "...",
+  "metric":       "status",
+  "value":        "RUNNING | SUCCESS | FAILURE",
+  "severity":     "INFO | WARN | CRITICAL",
+  "timestamp":    <unix int>,
+  "trace_id":     "...",
+  "trace_origin": "core",
+  "trace_hash":   "<sha256>",
+  "source":       "core",
+  "emitted_at":   "<iso8601 UTC>"
+}
+```
+
+Optional fields (only on applicable signals):
+- `execution_id` — execution, verification, execution_completed
+- `decision`, `policy_reference`, `action` — decision signal only
+- `enforcement_status` — enforcement signal only
+- `result` — verification signal only
+
+---
+
+## 8. SECURITY ✅
+
+```bash
+curl -X POST http://54.156.236.10:30003/execute-action \
+  -H "Content-Type: application/json" \
+  -d '{"trace_id":"hack","service_id":"web1-blue","action":"restart"}'
+
+# Real response:
+# HTTP 403 FORBIDDEN
+# {"error":"unauthorized"}
+```
+
+---
+
+## 9. CONCURRENCY ✅
+
+5 parallel logins — 5 isolated traces, zero cross-contamination:
+
+| User | trace_id | trace_hash prefix |
+|------|----------|-------------------|
+| test1 | a6e7edb5-a09c-40b0-8e36-8a47b7416f4c | 129b1c38 |
+| test2 | c9cdeb66-9a47-4c3e-bb44-94aa598f10b1 | 62ee7889 |
+| test3 | 804409d5-e46f-4486-a416-0624fce9d96c | 522dc2dd |
+| test4 | 263281aa-00a2-4bac-b126-bd6361fd8108 | 6062a8e5 |
+| test5 | a44e8de9-e9e7-457c-88bb-26f237bdaf7e | c67eeecc |
+
+---
+
+## 10. DELIVERABLES CHECKLIST
+
+| Deliverable | Status |
+|-------------|--------|
+| REVIEW_PACKET.md | ✅ Updated |
+| TRACE_VISIBILITY_PROOF.md | ✅ Real output embedded |
+| SARATHI_STREAM_PROOF.md | ✅ Real output embedded |
+| EXECUTION_VERIFICATION_PROOF.md | ✅ Real output embedded |
+| FULL_TRACE_STREAM_PROOF.md | ✅ Real output embedded |
+| review_packets/pravah_final_compliance.md | ✅ This file |
+| monitor/app.py — rewritten | ✅ No interpretation |
+| sarathi/app.py — enforcement signal added | ✅ |
+| executer/app.py — execution/verification split | ✅ |
+| monitor/signal_schema.json — updated | ✅ |

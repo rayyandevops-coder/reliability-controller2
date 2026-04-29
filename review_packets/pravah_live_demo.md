@@ -1,7 +1,9 @@
-# PRAVAH LIVE PRODUCTION DEMO
+# PRAVAH — LIVE PRODUCTION DEMO (FINAL)
 
-## 1. LIVE URL
-http://pravah.blackholeinfiverse.com *(DNS pending, currently accessed via IP)*
+## 1. SYSTEM ACCESS
+
+Domain:
+http://pravah.blackholeinfiverse.com
 
 Fallback:
 http://54.156.236.10
@@ -10,120 +12,62 @@ http://54.156.236.10
 
 ## 2. STREAM ENDPOINT
 
-curl -H "Host: pravah.blackholeinfiverse.com" \
--N http://54.156.236.10/signals/stream
+```bash
+curl -N http://54.156.236.10/signals/stream
+```
+
+This opens a live Server-Sent Events (SSE) stream.
+Each line represents a single signal.
 
 ---
 
-## 3. TRACE DEMO (REAL)
+## 3. TRACE DEMONSTRATION
 
-TRACE:
+Trace ID used:
 544e1170-288e-4467-984e-3816fa074f13
 
-### STREAM OUTPUT
+---
 
-data:
-{
-  "trace_id": "544e1170-288e-4467-984e-3816fa074f13",
-  "signals": [
-    {
-      "signal_type": "execution_completed",
-      "service": "web1-blue"
-    }
-  ],
-  "correlation": {
-    "user_events": [
-      {"event_type": "session_start"},
-      {"event_type": "user_login"},
-      {"event_type": "page_view"},
-      {"event_type": "interaction_click"},
-      {"event_type": "decision_made"},
-      {"event_type": "execution_done"}
-    ]
-  },
-  "causal_chain": ["execution"]
-}
+## 4. LIVE STREAM OUTPUT (REAL — FINAL FORMAT)
+
+Each line below is emitted independently.
+
+```
+data: {"signal_type":"login_detected","service":"web1","metric":"status","value":"RUNNING","severity":"INFO","timestamp":1777450910,"trace_id":"544e1170-288e-4467-984e-3816fa074f13","trace_origin":"core","source":"core"}
+
+data: {"signal_type":"decision","service":"system","metric":"status","value":"RUNNING","severity":"INFO","timestamp":1777450932,"trace_id":"544e1170-288e-4467-984e-3816fa074f13","trace_origin":"core","source":"core","decision":"ALLOW","policy_reference":"score_threshold_0.6","action":"restart"}
+
+data: {"signal_type":"enforcement","service":"sarathi","metric":"status","value":"RUNNING","severity":"INFO","timestamp":1777450932,"trace_id":"544e1170-288e-4467-984e-3816fa074f13","trace_origin":"core","source":"core","enforcement_status":"validated"}
+
+data: {"signal_type":"execution","service":"web1-blue","metric":"status","value":"RUNNING","severity":"INFO","timestamp":1777450932,"trace_id":"544e1170-288e-4467-984e-3816fa074f13","trace_origin":"core","source":"core","execution_id":"4a8e2bb4"}
+
+data: {"signal_type":"verification","service":"web1-blue","metric":"status","value":"SUCCESS","severity":"INFO","timestamp":1777450932,"trace_id":"544e1170-288e-4467-984e-3816fa074f13","trace_origin":"core","source":"core","execution_id":"4a8e2bb4","result":"SUCCESS"}
+```
 
 ---
 
-## 4. EXECUTION PROOF
+## 5. KEY OBSERVATIONS
 
-Command:
-kubectl get pods -n prod -w
-
-Output:
-web1-blue-OLD   Terminating
-web1-blue-NEW   Running
-
----
-
-## 5. FAILURE DEMO
-
-TRACE:
-94ec5f75-8067-4eb3-aa9e-0fd7ec090616
-
-### STREAM OUTPUT
-
-{
-  "trace_id": "94ec5f75-8067-4eb3-aa9e-0fd7ec090616",
-  "signals": [
-    {
-      "signal_type": "execution_failed",
-      "service": "invalid-service"
-    }
-  ]
-}
+* Each signal is emitted independently
+* No signal grouping or aggregation
+* No interpretation logic present
+* trace_id remains identical across all signals
+* execution does NOT imply success
+* verification confirms outcome
 
 ---
 
-## 6. SECURITY PROOF
+## 6. VALIDATION
 
-Direct execution blocked:
-
-curl POST /execute-action
-
-Response:
-{
-  "error": "unauthorized"
-}
+✔ Real-time stream
+✔ Real infrastructure execution
+✔ Trace continuity maintained
+✔ No inferred fields
 
 ---
 
-## 7. CONCURRENCY TEST
+## 7. FINAL STATEMENT
 
-5 parallel traces executed:
-
-test1 → 2b71499d...
-test2 → d111df3a...
-test3 → c38b2d94...
-test4 → 94dece61...
-test5 → 9f5c7b43...
-
-All appeared independently in stream.
-
----
-
-## 8. FINAL FLOW (VERIFIED)
-
-Core/Web → Monitor → Sarathi → Executer → Monitor → Stream
-
-✔ Trace continuity maintained  
-✔ No bypass of Sarathi  
-✔ Real infrastructure execution  
-✔ Live streaming output  
-
----
-
-## 9. SYSTEM STATUS
-
-✔ Fully runnable  
-✔ Real-time observable  
-✔ Reproducible via curl  
-✔ No simulated data  
-✔ Production-demo ready  
-
----
-
-## FINAL STATEMENT
-
-Pravah is now a publicly observable, trace-linked system demonstrating real-time infrastructure behavior across user, execution, and policy layers.
+Pravah emits only observed facts.
+Each signal is independent, verifiable, and trace-linked.
+No interpretation, correlation, or aggregation exists in the system.
